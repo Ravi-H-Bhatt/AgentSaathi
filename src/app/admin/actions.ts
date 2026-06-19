@@ -1,0 +1,62 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentAgent } from "@/lib/auth";
+import type { AgentStatus } from "@/lib/types";
+
+/** Admin-only: set an agent's approval status. */
+export async function setAgentStatus(agentId: string, status: AgentStatus) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") {
+    throw new Error("Forbidden");
+  }
+  const db = createAdminClient();
+  await db.from("agents").update({ status }).eq("id", agentId).eq("role", "agent");
+  revalidatePath("/admin");
+}
+
+/** Admin-only: add a premium chart row. */
+export async function addPremiumRow(formData: FormData) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") throw new Error("Forbidden");
+
+  const db = createAdminClient();
+  await db.from("premium_charts").insert({
+    policy_type: (formData.get("policy_type") as string) || null,
+    age_min: Number(formData.get("age_min")),
+    age_max: Number(formData.get("age_max")),
+    sum_insured: formData.get("sum_insured")
+      ? Number(formData.get("sum_insured"))
+      : null,
+    premium: Number(formData.get("premium")),
+    notes: (formData.get("notes") as string) || null,
+  });
+  revalidatePath("/admin/premiums");
+}
+
+/** Admin-only: delete a premium chart row. */
+export async function deletePremiumRow(id: string) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") throw new Error("Forbidden");
+  const db = createAdminClient();
+  await db.from("premium_charts").delete().eq("id", id);
+  revalidatePath("/admin/premiums");
+}
+
+/** Admin-only: bulk insert parsed premium rows. */
+export async function addPremiumRows(
+  rows: {
+    policy_type: string | null;
+    age_min: number;
+    age_max: number;
+    sum_insured: number | null;
+    premium: number;
+  }[]
+) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") throw new Error("Forbidden");
+  const db = createAdminClient();
+  await db.from("premium_charts").insert(rows);
+  revalidatePath("/admin/premiums");
+}
