@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { Search, ChevronRight } from "lucide-react";
 
 interface Row {
@@ -67,26 +68,35 @@ export function ClientsList({ clients }: { clients: Row[] }) {
                 {letter}
               </p>
               <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
-                {rows.map((c) => (
-                  <Link
+                {rows.map((c, i) => (
+                  <motion.div
                     key={c.id}
-                    href={`/clients/${c.id}`}
-                    className="flex items-center justify-between px-5 py-4 hover:bg-black/[.02] transition"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: Math.min(i * 0.03, 0.3), ease: "easeOut" }}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-sm font-semibold shrink-0">
-                        {c.full_name.charAt(0).toUpperCase()}
+                    <Link
+                      href={`/clients/${c.id}`}
+                      className="group flex items-center justify-between px-5 py-4 hover:bg-black/[.02] hover:pl-6 transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-sm font-semibold shrink-0 transition-transform duration-200 group-hover:scale-110">
+                          {c.full_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{c.full_name}</p>
+                          <p className="text-sm text-muted truncate">
+                            {c.policyCount} {c.policyCount === 1 ? "policy" : "policies"}
+                            {c.email ? ` · ${c.email}` : ""}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">{c.full_name}</p>
-                        <p className="text-sm text-muted truncate">
-                          {c.policyCount} {c.policyCount === 1 ? "policy" : "policies"}
-                          {c.email ? ` · ${c.email}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <ChevronRight size={18} className="text-muted shrink-0" />
-                  </Link>
+                      <ChevronRight
+                        size={18}
+                        className="text-muted shrink-0 transition-transform duration-200 group-hover:translate-x-1"
+                      />
+                    </Link>
+                  </motion.div>
                 ))}
               </div>
             </div>

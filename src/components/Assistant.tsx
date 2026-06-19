@@ -1,24 +1,30 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 
 interface Msg {
   role: "user" | "assistant";
   content: string;
 }
 
+const WELCOME: Msg = {
+  role: "assistant",
+  content:
+    "Namaste! I'm your AgentSaathi assistant. Ask me about your own clients and policies (e.g. “What policies does Rahul Sharma have?”), draft client emails (e.g. “Draft a renewal email for Rahul Sharma”), or general questions about insurance, mutual funds, and finance in India. For general questions I'll search the web when it's enabled.",
+};
+
 export function Assistant() {
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      role: "assistant",
-      content:
-        "Hi! Ask me about your clients and policies — for example, “What policies does Rahul Sharma have?” or “Whose renewals are coming up?” I only answer from your own data.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  function clearChat() {
+    if (loading) return;
+    setMessages([WELCOME]);
+    setInput("");
+  }
 
   async function send() {
     const q = input.trim();
@@ -66,6 +72,15 @@ export function Assistant() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
+      <div className="flex items-center justify-end px-4 py-2 border-b border-border">
+        <button
+          onClick={clearChat}
+          disabled={loading || messages.length <= 1}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted hover:text-foreground px-2.5 py-1.5 rounded-lg hover:bg-black/[.04] transition disabled:opacity-40"
+        >
+          <Trash2 size={14} /> Clear chat
+        </button>
+      </div>
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-5 space-y-4">
         {messages.map((m, i) => (
           <div

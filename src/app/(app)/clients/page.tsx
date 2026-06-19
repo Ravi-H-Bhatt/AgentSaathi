@@ -1,46 +1,46 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getCurrentAgent } from "@/lib/auth";
-import { getClients, getPolicies } from "@/lib/data";
+import { getAllClientsWithPolicies } from "@/lib/data";
+import { ownerIdFor, permissionsFor } from "@/lib/team";
 import { ClientsList } from "@/components/ClientsList";
+import { DownloadAllButton } from "@/components/DownloadAllButton";
 
 export default async function ClientsPage() {
   const agent = (await getCurrentAgent())!;
-  const [clients, policies] = await Promise.all([
-    getClients(agent.id),
-    getPolicies(agent.id),
-  ]);
+  if (!permissionsFor(agent).clients) redirect("/dashboard");
+  const clientsWithPolicies = await getAllClientsWithPolicies(ownerIdFor(agent));
 
-  const counts: Record<string, number> = {};
-  const numbers: Record<string, string[]> = {};
-  for (const p of policies) {
-    counts[p.client_id] = (counts[p.client_id] || 0) + 1;
-    if (p.policy_number) {
-      (numbers[p.client_id] ||= []).push(p.policy_number);
-    }
-  }
-
-  const data = clients.map((c) => ({
+  const data = clientsWithPolicies.map((c) => ({
     id: c.id,
     full_name: c.full_name,
     email: c.email,
     phone: c.phone,
-    policyCount: counts[c.id] || 0,
-    policyNumbers: numbers[c.id] || [],
+    policyCount: c.policies.length,
+    policyNumbers: c.policies
+      .map((p) => p.policy_number)
+      .filter((n): n is string => !!n),
   }));
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clients</h1>
-          <p className="text-muted mt-1">{clients.length} total</p>
+          <p className="text-muted mt-1">{clientsWithPolicies.length} total</p>
         </div>
-        <Link
-          href="/upload"
-          className="text-sm font-medium px-4 py-2 rounded-full bg-foreground text-background hover:opacity-90 transition"
-        >
-          + Add policy
-        </Link>
+        <div className="flex items-center gap-2">
+          <DownloadAllButton
+            clients={clientsWithPolicies}
+            agentName={agent.full_name || agent.email}
+          />
+          <Link
+            href="/upload"
+            className="text-sm font-medium px-4 py-2 rounded-full bg-foreground text-background hover:opacity-90 transition"
+          >
+            + Add policy
+          </Link>
+        </div>
       </div>
       <ClientsList clients={data} />
     </div>

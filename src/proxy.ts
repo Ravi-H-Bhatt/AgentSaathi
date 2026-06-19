@@ -10,6 +10,12 @@ import { createServerClient } from "@supabase/ssr";
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // Never touch auth routes — refreshing cookies here can clobber the PKCE
+  // code-verifier mid-handshake and cause "bad_oauth_state" errors.
+  if (request.nextUrl.pathname.startsWith("/auth")) {
+    return response;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   // Not configured yet — let pages render (they handle the unconfigured state).

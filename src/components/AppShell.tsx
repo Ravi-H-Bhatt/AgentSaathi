@@ -12,30 +12,45 @@ import {
   Menu,
   X,
   LogOut,
+  UsersRound,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
-
-const nav = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/clients", label: "Clients", icon: Users },
-  { href: "/upload", label: "Upload policy", icon: Upload },
-];
+import { ClockWidget } from "@/components/ClockWidget";
+import type { Permissions } from "@/lib/types";
 
 export function AppShell({
   children,
   agentName,
   agentEmail,
-  avatarUrl,
+  isColleague,
+  permissions,
+  openSince,
 }: {
   children: React.ReactNode;
   agentName: string;
   agentEmail: string;
-  avatarUrl: string | null;
+  isColleague: boolean;
+  permissions: Permissions;
+  openSince: string | null;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+
+  // Build nav based on role/permissions.
+  const nav: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  ];
+  if (!isColleague || permissions.clients)
+    nav.push({ href: "/clients", label: "Clients", icon: Users });
+  if (!isColleague || permissions.upload)
+    nav.push({ href: "/upload", label: "Upload policy", icon: Upload });
+  // Only owners manage colleagues.
+  if (!isColleague)
+    nav.push({ href: "/colleagues", label: "Colleagues", icon: UsersRound });
+
+  const showAssistant = !isColleague || permissions.ai;
 
   const SidebarContent = (
     <div className="flex flex-col h-full">
@@ -50,42 +65,40 @@ export function AppShell({
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${
+              className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 active
-                  ? "bg-foreground text-background"
-                  : "text-muted hover:bg-black/[.04] hover:text-foreground"
+                  ? "bg-foreground text-background shadow-sm"
+                  : "text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4"
               }`}
             >
-              <item.icon size={18} />
+              <item.icon
+                size={18}
+                className={`transition-transform duration-200 ${
+                  active ? "" : "group-hover:scale-110"
+                }`}
+              />
               {item.label}
             </Link>
           );
         })}
-        <button
-          onClick={() => {
-            setAssistantOpen(true);
-            setMobileOpen(false);
-          }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground transition"
-        >
-          <Bot size={18} />
-          AI Assistant
-        </button>
+        {showAssistant && (
+          <button
+            onClick={() => {
+              setAssistantOpen(true);
+              setMobileOpen(false);
+            }}
+            className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4 transition-all duration-200"
+          >
+            <Bot size={18} className="transition-transform duration-200 group-hover:scale-110" />
+            AI Assistant
+          </button>
+        )}
       </nav>
       <div className="p-3 border-t border-border">
         <div className="flex items-center gap-3 px-2 py-2">
-          {avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatarUrl}
-              alt=""
-              className="h-8 w-8 rounded-full object-cover"
-            />
-          ) : (
-            <div className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-semibold">
-              {agentName.charAt(0).toUpperCase()}
-            </div>
-          )}
+          <div className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-semibold shrink-0">
+            {agentName.charAt(0).toUpperCase()}
+          </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium truncate">{agentName}</p>
             <p className="text-xs text-muted truncate">{agentEmail}</p>
@@ -145,13 +158,18 @@ export function AppShell({
           <div className="lg:hidden">
             <Logo withText={false} />
           </div>
-          <button
-            onClick={() => setAssistantOpen(true)}
-            className="ml-auto flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full bg-foreground text-background hover:opacity-90 transition"
-          >
-            <Bot size={16} />
-            <span className="hidden sm:inline">Ask AI</span>
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <ClockWidget openSince={openSince} />
+            {showAssistant && (
+              <button
+                onClick={() => setAssistantOpen(true)}
+                className="group flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full bg-foreground text-background hover:opacity-90 hover:scale-105 active:scale-95 transition-all duration-200 sheen"
+              >
+                <Bot size={16} className="transition-transform duration-300 group-hover:rotate-12" />
+                <span className="hidden sm:inline">Ask AI</span>
+              </button>
+            )}
+          </div>
         </header>
         <main className="flex-1 p-4 lg:p-8 max-w-6xl w-full mx-auto">
           {children}

@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { answerGrounded } from "@/lib/groq";
+import { webSearchConfigured } from "@/lib/websearch";
 import type { Client, Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -48,6 +50,12 @@ export async function POST(request: NextRequest) {
   if (!agent || agent.status !== "approved") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!permissionsFor(agent).ai) {
+    return NextResponse.json(
+      { error: "You don't have access to the AI assistant." },
+      { status: 403 }
+    );
+  }
 
   const { question, history } = await request.json();
   if (!question || typeof question !== "string") {
@@ -57,23 +65,29 @@ export async function POST(request: NextRequest) {
   // Ensure session is valid (RLS would also enforce ownership).
   await createClient();
   const db = createAdminClient();
+  const ownerId = ownerIdFor(agent);
 
   const { data: clients } = await db
     .from("clients")
     .select("*")
-    .eq("agent_id", agent.id);
+    .eq("agent_id", ownerId);
   const { data: policies } = await db
     .from("policies")
     .select("*")
-    .eq("agent_id", agent.id);
+    .eq("agent_id", ownerId);
 
   const context = buildContext(
     (clients as Client[]) || [],
     (policies as Policy[]) || []
   );
 
+  // Record the search for the colleagues activity feed (best-effort).
+  await logActivity(agent, "ai_search", question.slice(0, 140));
+
   try {
-    const answer = await answerGrounded(question, context, history || []);
+    const answer = await answerGrounded(question, context, history || [], {
+      webEnabled: webSearchConfigured(),
+    });
     return NextResponse.json({ answer });
   } catch {
     return NextResponse.json(

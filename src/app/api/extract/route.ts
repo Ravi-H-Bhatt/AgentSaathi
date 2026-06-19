@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { extractPdfText } from "@/lib/pdf";
 import { extractPolicyFromText } from "@/lib/groq";
 
@@ -17,6 +18,12 @@ export async function POST(request: NextRequest) {
   if (!agent || agent.status !== "approved") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!permissionsFor(agent).upload) {
+    return NextResponse.json(
+      { error: "You don't have permission to upload policies." },
+      { status: 403 }
+    );
+  }
 
   const form = await request.formData();
   const file = form.get("file");
@@ -29,10 +36,11 @@ export async function POST(request: NextRequest) {
 
   const bytes = Buffer.from(await file.arrayBuffer());
   const db = createAdminClient();
+  const ownerId = ownerIdFor(agent);
 
-  // Store original under {agentId}/{timestamp}-{filename}
+  // Store original under {ownerId}/{timestamp}-{filename}
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${agent.id}/${Date.now()}-${safeName}`;
+  const path = `${ownerId}/${Date.now()}-${safeName}`;
   const { error: upErr } = await db.storage
     .from("policy-files")
     .upload(path, bytes, { contentType: "application/pdf", upsert: false });
@@ -43,6 +51,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  await logActivity(agent, "upload_policy", file.name);
 
   // Extract text layer.
   const text = await extractPdfText(bytes);

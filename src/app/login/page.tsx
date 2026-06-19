@@ -4,13 +4,19 @@ import { Logo } from "@/components/Logo";
 import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { getCurrentAgent } from "@/lib/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const agent = await getCurrentAgent();
   if (agent) {
     if (agent.role === "admin") redirect("/admin");
     if (agent.status === "approved") redirect("/dashboard");
     redirect("/pending");
   }
+
+  const { error } = await searchParams;
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -42,6 +48,11 @@ export default async function LoginPage() {
             <p className="text-sm text-muted mt-1 mb-6">
               Continue with your Google account.
             </p>
+            {error && (
+              <div className="mb-4 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+                {error}
+              </div>
+            )}
             <GoogleSignIn />
             <p className="text-xs text-muted mt-6 leading-relaxed">
               New agents need admin approval before accessing the dashboard.

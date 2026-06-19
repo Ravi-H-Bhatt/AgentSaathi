@@ -49,9 +49,9 @@ export async function getCurrentAgent(): Promise<Agent | null> {
         .eq("id", user.id)
         .select("*")
         .single();
-      return updated as Agent;
+      return normalizeAgent(updated);
     }
-    return existing as Agent;
+    return normalizeAgent(existing);
   }
 
   // First sign-in: create the agent row.
@@ -69,5 +69,19 @@ export async function getCurrentAgent(): Promise<Agent | null> {
     .select("*")
     .single();
 
-  return created as Agent;
+  return normalizeAgent(created);
+}
+
+/** Ensure permissions is an object and the row matches the Agent type. */
+function normalizeAgent(row: unknown): Agent | null {
+  if (!row) return null;
+  const r = row as Record<string, unknown>;
+  return {
+    ...(r as object),
+    parent_agent_id: (r.parent_agent_id as string) ?? null,
+    permissions:
+      r.permissions && typeof r.permissions === "object"
+        ? (r.permissions as Agent["permissions"])
+        : { ai: true, clients: true, upload: true, email: true },
+  } as Agent;
 }

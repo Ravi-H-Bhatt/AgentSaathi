@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
+import { ownerIdFor } from "@/lib/team";
 import { money, shortDate, isThisMonth, daysUntil } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
@@ -8,9 +9,10 @@ import type { Client, Policy } from "@/lib/types";
 
 export default async function DashboardPage() {
   const agent = (await getCurrentAgent())!;
+  const ownerId = ownerIdFor(agent);
   const [clients, policies] = await Promise.all([
-    getClients(agent.id),
-    getPolicies(agent.id),
+    getClients(ownerId),
+    getPolicies(ownerId),
   ]);
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
@@ -31,7 +33,6 @@ export default async function DashboardPage() {
           Welcome back. Here&apos;s what needs your attention.
         </p>
       </div>
-
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Reveal>
           <StatCard label="Total clients" value={clients.length.toString()} />
@@ -72,7 +73,7 @@ export default async function DashboardPage() {
                   <li key={p.id}>
                     <Link
                       href={`/clients/${p.client_id}`}
-                      className="flex items-center justify-between px-5 py-4 hover:bg-black/[.02] transition"
+                      className="flex items-center justify-between px-5 py-4 hover:bg-black/[.02] hover:pl-6 transition-all duration-200"
                     >
                       <div className="min-w-0">
                         <p className="font-medium truncate">

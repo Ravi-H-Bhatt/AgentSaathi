@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { ownerIdFor, permissionsFor } from "@/lib/team";
 import { computeAge } from "@/lib/premium";
 
 export const runtime = "nodejs";
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest) {
   if (!agent || agent.status !== "approved") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  if (!permissionsFor(agent).upload) {
+    return NextResponse.json(
+      { error: "You don't have permission to add policies." },
+      { status: 403 }
+    );
+  }
 
   const body = (await request.json()) as SaveBody;
   if (!body.client_name || !body.client_name.trim()) {
@@ -47,6 +54,7 @@ export async function POST(request: NextRequest) {
   }
 
   const db = createAdminClient();
+  const ownerId = ownerIdFor(agent);
   let clientId = body.existing_client_id || null;
 
   const dob = dateOrNull(body.date_of_birth);
@@ -58,7 +66,7 @@ export async function POST(request: NextRequest) {
     const { data: client, error: cErr } = await db
       .from("clients")
       .insert({
-        agent_id: agent.id,
+        agent_id: ownerId,
         full_name: body.client_name.trim(),
         email: body.client_email || null,
         phone: body.client_phone || null,
@@ -79,7 +87,7 @@ export async function POST(request: NextRequest) {
   const { data: policy, error: pErr } = await db
     .from("policies")
     .insert({
-      agent_id: agent.id,
+      agent_id: ownerId,
       client_id: clientId,
       company: body.company || null,
       policy_type: body.policy_type || null,

@@ -9,14 +9,12 @@ export function AgentRow({
   id,
   name,
   email,
-  avatar,
   status,
   signedUp,
 }: {
   id: string;
   name: string | null;
   email: string;
-  avatar: string | null;
   status: AgentStatus;
   signedUp: string;
 }) {
@@ -36,14 +34,9 @@ export function AgentRow({
   return (
     <div className="flex items-center justify-between px-5 py-4 gap-4">
       <div className="flex items-center gap-3 min-w-0">
-        {avatar ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={avatar} alt="" className="h-9 w-9 rounded-full object-cover" />
-        ) : (
-          <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-sm font-semibold">
-            {(name || email).charAt(0).toUpperCase()}
-          </div>
-        )}
+        <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-sm font-semibold shrink-0">
+          {(name || email).charAt(0).toUpperCase()}
+        </div>
         <div className="min-w-0">
           <p className="font-medium truncate">{name || "—"}</p>
           <p className="text-sm text-muted truncate">

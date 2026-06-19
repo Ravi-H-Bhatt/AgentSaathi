@@ -41,7 +41,6 @@ export default async function AdminAgentsPage() {
                 id={a.id}
                 name={a.full_name}
                 email={a.email}
-                avatar={a.avatar_url}
                 status={a.status}
                 signedUp={shortDate(a.created_at)}
               />
@@ -67,7 +66,6 @@ export default async function AdminAgentsPage() {
                 id={a.id}
                 name={a.full_name}
                 email={a.email}
-                avatar={a.avatar_url}
                 status={a.status}
                 signedUp={shortDate(a.created_at)}
               />

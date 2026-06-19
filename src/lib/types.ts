@@ -1,5 +1,19 @@
-export type Role = "agent" | "admin";
+export type Role = "agent" | "admin" | "colleague";
 export type AgentStatus = "pending" | "approved" | "rejected";
+
+export interface Permissions {
+  ai: boolean;
+  clients: boolean;
+  upload: boolean;
+  email: boolean;
+}
+
+export const DEFAULT_PERMISSIONS: Permissions = {
+  ai: true,
+  clients: true,
+  upload: true,
+  email: true,
+};
 
 export interface Agent {
   id: string;
@@ -8,6 +22,37 @@ export interface Agent {
   avatar_url: string | null;
   role: Role;
   status: AgentStatus;
+  parent_agent_id: string | null;
+  permissions: Permissions;
+  created_at: string;
+}
+
+export interface Invitation {
+  id: string;
+  agent_id: string;
+  token: string;
+  email: string | null;
+  permissions: Permissions;
+  status: "pending" | "accepted" | "revoked";
+  accepted_by: string | null;
+  created_at: string;
+  accepted_at: string | null;
+}
+
+export interface TimeEntry {
+  id: string;
+  agent_id: string;
+  owner_id: string;
+  clock_in: string;
+  clock_out: string | null;
+}
+
+export interface ActivityLog {
+  id: string;
+  agent_id: string;
+  owner_id: string;
+  action: string;
+  detail: string | null;
   created_at: string;
 }
 

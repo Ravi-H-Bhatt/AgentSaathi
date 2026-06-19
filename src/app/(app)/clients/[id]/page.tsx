@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClientWithPolicies, getPremiumCharts } from "@/lib/data";
+import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { projectPremiumChanges } from "@/lib/premium";
 import { ClientDetail } from "@/components/ClientDetail";
 
@@ -13,8 +14,13 @@ export default async function ClientPage({
 }) {
   const { id } = await params;
   const agent = (await getCurrentAgent())!;
-  const client = await getClientWithPolicies(agent.id, id);
+  if (!permissionsFor(agent).clients) redirect("/dashboard");
+  const ownerId = ownerIdFor(agent);
+  const client = await getClientWithPolicies(ownerId, id);
   if (!client) notFound();
+
+  // Log that this user viewed the client (for the colleagues activity feed).
+  await logActivity(agent, "view_client", client.full_name);
 
   const charts = await getPremiumCharts();
   const projections = projectPremiumChanges(client, client.policies, charts);
