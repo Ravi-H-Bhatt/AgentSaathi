@@ -63,6 +63,21 @@ export async function POST(request: NextRequest) {
     (dob ? computeAge({ date_of_birth: dob, age: null }) : null);
 
   if (!clientId) {
+    // Reuse an existing client (same owner + name, and matching DOB/email when
+    // present) instead of creating a duplicate person on every upload.
+    let findClient = db
+      .from("clients")
+      .select("id")
+      .eq("agent_id", ownerId)
+      .ilike("full_name", body.client_name.trim());
+    if (dob) findClient = findClient.eq("date_of_birth", dob);
+    if (body.client_email)
+      findClient = findClient.ilike("email", body.client_email);
+    const { data: match } = await findClient.limit(1).maybeSingle();
+    if (match) clientId = match.id;
+  }
+
+  if (!clientId) {
     const { data: client, error: cErr } = await db
       .from("clients")
       .insert({
@@ -84,18 +99,62 @@ export async function POST(request: NextRequest) {
     clientId = client.id;
   }
 
+  const company = body.company || null;
+  const policyType = body.policy_type || null;
+  const policyNumber = body.policy_number || null;
+  const sumInsured = numOrNull(body.sum_insured);
+  const premium = numOrNull(body.premium);
+  const startDate = dateOrNull(body.start_date);
+  const renewalDate = dateOrNull(body.renewal_date);
+
+  // Deduplication: skip storing a policy that is identical to one the same
+  // client already has. We compare every meaningful field, so only truly
+  // unique policies get inserted — re-uploading the same document is a no-op.
+  let dupQuery = db
+    .from("policies")
+    .select("id")
+    .eq("agent_id", ownerId)
+    .eq("client_id", clientId);
+
+  const dupFields = {
+    company,
+    policy_type: policyType,
+    policy_number: policyNumber,
+    sum_insured: sumInsured,
+    premium,
+    start_date: startDate,
+    renewal_date: renewalDate,
+  } as const;
+
+  for (const [col, val] of Object.entries(dupFields)) {
+    // `.is()` for null comparisons, `.eq()` otherwise — so a record with a
+    // null field only matches another null field, not any value.
+    dupQuery = val === null ? dupQuery.is(col, null) : dupQuery.eq(col, val);
+  }
+
+  const { data: existing } = await dupQuery.limit(1).maybeSingle();
+
+  if (existing) {
+    return NextResponse.json({
+      ok: true,
+      clientId,
+      policyId: existing.id,
+      duplicate: true,
+    });
+  }
+
   const { data: policy, error: pErr } = await db
     .from("policies")
     .insert({
       agent_id: ownerId,
       client_id: clientId,
-      company: body.company || null,
-      policy_type: body.policy_type || null,
-      policy_number: body.policy_number || null,
-      sum_insured: numOrNull(body.sum_insured),
-      premium: numOrNull(body.premium),
-      start_date: dateOrNull(body.start_date),
-      renewal_date: dateOrNull(body.renewal_date),
+      company,
+      policy_type: policyType,
+      policy_number: policyNumber,
+      sum_insured: sumInsured,
+      premium,
+      start_date: startDate,
+      renewal_date: renewalDate,
       source_file_path: body.source_file_path || null,
     })
     .select("id")

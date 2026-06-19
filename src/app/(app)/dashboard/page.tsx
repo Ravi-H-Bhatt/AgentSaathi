@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor } from "@/lib/team";
-import { money, shortDate, isThisMonth, daysUntil } from "@/lib/format";
+import { money, isThisMonth } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
+import { RenewalsList } from "@/components/RenewalsList";
 import type { Client, Policy } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -65,49 +65,24 @@ export default async function DashboardPage() {
               No renewals this month. You&apos;re all caught up.
             </p>
           ) : (
-            <ul className="divide-y divide-border">
-              {renewalsThisMonth.map((p: Policy) => {
+            <RenewalsList
+                agentName={agent.full_name || agent.email}
+                renewals={renewalsThisMonth.map((p: Policy) => {
                 const c = clientById.get(p.client_id) as Client | undefined;
-                const dleft = daysUntil(p.renewal_date);
-                return (
-                  <li key={p.id}>
-                    <Link
-                      href={`/clients/${p.client_id}`}
-                      className="flex items-center justify-between px-5 py-4 hover:bg-black/[.02] hover:pl-6 transition-all duration-200"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium truncate">
-                          {c?.full_name || "Unknown client"}
-                        </p>
-                        <p className="text-sm text-muted truncate">
-                          {p.policy_type || "Policy"}
-                          {p.company ? ` · ${p.company}` : ""} ·{" "}
-                          {p.policy_number || "—"}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0 ml-4">
-                        <p className="text-sm font-medium">
-                          {shortDate(p.renewal_date)}
-                        </p>
-                        <p
-                          className={`text-xs ${
-                            dleft != null && dleft <= 7
-                              ? "text-red-600"
-                              : "text-muted"
-                          }`}
-                        >
-                          {dleft != null
-                            ? dleft < 0
-                              ? `${Math.abs(dleft)}d overdue`
-                              : `in ${dleft}d`
-                            : ""}
-                        </p>
-                      </div>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+                return {
+                  id: p.id,
+                  clientId: p.client_id,
+                  clientName: c?.full_name || "Unknown client",
+                  clientEmail: c?.email || null,
+                  policyType: p.policy_type,
+                  company: p.company,
+                  policyNumber: p.policy_number,
+                  sumInsured: p.sum_insured,
+                  premium: p.premium,
+                  renewalDate: p.renewal_date,
+                  mode: p.mode,
+                };
+              })} />
           )}
         </section>
       </Reveal>

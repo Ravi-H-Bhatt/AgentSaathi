@@ -49,6 +49,7 @@ create table if not exists public.policies (
   policy_number text,
   sum_insured numeric,
   premium numeric,
+  mode text,
   start_date date,
   renewal_date date,
   status text not null default 'active',
@@ -59,6 +60,11 @@ create table if not exists public.policies (
 create index if not exists policies_agent_idx on public.policies (agent_id);
 create index if not exists policies_client_idx on public.policies (client_id);
 create index if not exists policies_renewal_idx on public.policies (renewal_date);
+
+-- Idempotent column add for existing databases (bulk register import: "Mode").
+alter table public.policies add column if not exists mode text;
+-- Speeds up dedup lookups during bulk import.
+create index if not exists policies_number_idx on public.policies (agent_id, policy_number);
 
 -- ============================================================
 -- premium_charts: admin-uploaded age/type premium bands.
@@ -152,6 +158,32 @@ create policy premium_charts_admin_write on public.premium_charts
 drop policy if exists email_log_owner_all on public.email_log;
 create policy email_log_owner_all on public.email_log
   for all using (agent_id = auth.uid()) with check (agent_id = auth.uid());
+
+-- ============================================================
+-- team_chat: simple real-time-ish team messaging.
+-- ============================================================
+create table if not exists public.team_chat (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references public.agents (id) on delete cascade,
+  sender_id uuid not null references public.agents (id) on delete cascade,
+  sender_name text,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists team_chat_owner_idx on public.team_chat (owner_id, created_at);
+
+alter table public.team_chat enable row level security;
+drop policy if exists team_chat_team_all on public.team_chat;
+create policy team_chat_team_all on public.team_chat
+  for all
+  using (
+    owner_id = auth.uid()
+    or sender_id = auth.uid()
+    or owner_id in (
+      select parent_agent_id from public.agents where id = auth.uid() and parent_agent_id is not null
+    )
+  )
+  with check (sender_id = auth.uid());
 
 -- ============================================================
 -- Storage bucket for uploaded PDFs (private).

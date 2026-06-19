@@ -158,7 +158,12 @@ export function ClientDetail({
                   </div>
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
                     <Field label="Sum insured" value={money(p.sum_insured)} />
-                    <Field label="Premium" value={money(p.premium)} />
+                    <Field
+                      label="Premium"
+                      value={
+                        money(p.premium) + (p.mode ? ` (${p.mode})` : "")
+                      }
+                    />
                     <Field label="Start" value={shortDate(p.start_date)} />
                     <Field label="Renewal" value={shortDate(p.renewal_date)} />
                   </dl>

@@ -24,7 +24,8 @@ export function ClientsList({ clients }: { clients: Row[] }) {
       (c) =>
         c.full_name.toLowerCase().includes(term) ||
         c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
-        (c.email || "").toLowerCase().includes(term)
+        (c.email || "").toLowerCase().includes(term) ||
+        (c.phone || "").toLowerCase().includes(term)
     );
   }, [q, clients]);
 
@@ -49,7 +50,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, policy number, or email…"
+          placeholder="Search by name, policy number, phone, or email…"
           className="w-full rounded-xl border border-border bg-card pl-11 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/10"
         />
       </div>
@@ -87,7 +88,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
                           <p className="font-medium truncate">{c.full_name}</p>
                           <p className="text-sm text-muted truncate">
                             {c.policyCount} {c.policyCount === 1 ? "policy" : "policies"}
-                            {c.email ? ` · ${c.email}` : ""}
+                            {c.email ? ` · ${c.email}` : c.phone ? ` · ${c.phone}` : ""}
                           </p>
                         </div>
                       </div>

@@ -77,12 +77,36 @@ export interface Policy {
   policy_number: string | null;
   sum_insured: number | null;
   premium: number | null;
+  /** Premium payment frequency, e.g. Mly/QLY/HLY/YLY/SGL (from register "Mode"). */
+  mode: string | null;
   start_date: string | null;
   renewal_date: string | null;
   status: string;
   source_file_path: string | null;
   raw_extract: Record<string, unknown> | null;
   created_at: string;
+}
+
+/**
+ * One parsed row from a bulk "Policy Register" PDF (many policies in a table).
+ * Maps directly to a policy; rows are grouped into clients by name on save.
+ */
+export interface RegisterRow {
+  /** Serial number from the register (for display/ordering only). */
+  sn: number | null;
+  client_name: string | null;
+  client_phone: string | null;
+  policy_number: string | null;
+  /** "Plan" column, e.g. 165/35/35. */
+  policy_type: string | null;
+  /** "Mode" column, e.g. Mly/QLY/HLY/YLY/SGL. */
+  mode: string | null;
+  /** "D.O.C." (date of commencement) -> start_date, ISO. */
+  start_date: string | null;
+  /** "F.U.P." (first unpaid premium / next due) -> renewal_date, ISO. */
+  renewal_date: string | null;
+  premium: number | null;
+  sum_insured: number | null;
 }
 
 export interface PremiumChart {

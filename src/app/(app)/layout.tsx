@@ -23,6 +23,7 @@ export default async function AppLayout({
     <AppShell
       agentName={agent.full_name || agent.email}
       agentEmail={agent.email}
+      agentId={agent.id}
       isColleague={isColleague(agent)}
       permissions={permissionsFor(agent)}
       openSince={openEntry?.clock_in ?? null}

@@ -4,6 +4,7 @@ import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { extractPdfText } from "@/lib/pdf";
 import { extractPolicyFromText } from "@/lib/groq";
+import { looksLikeRegister, parseRegister } from "@/lib/register";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -68,12 +69,30 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Bulk "Policy Register" path: many policies in one fixed-column table.
+  // Parsed deterministically (no LLM) — fast, free, and accurate for 1000+ rows.
+  if (looksLikeRegister(text)) {
+    const rows = parseRegister(text);
+    if (rows.length > 0) {
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: false,
+        mode: "bulk",
+        rowCount: rows.length,
+        rows,
+      });
+    }
+    // Looked like a register but parsed nothing — fall through to single-policy.
+  }
+
   try {
     const extracted = await extractPolicyFromText(text);
     return NextResponse.json({
       filePath: path,
       fileName: file.name,
       scanned: false,
+      mode: "single",
       extracted,
     });
   } catch {
@@ -81,6 +100,7 @@ export async function POST(request: NextRequest) {
       filePath: path,
       fileName: file.name,
       scanned: false,
+      mode: "single",
       message: "Could not auto-parse the document. Please review/enter fields manually.",
       extracted: emptyExtract(),
     });
