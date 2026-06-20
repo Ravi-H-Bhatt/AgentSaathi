@@ -461,7 +461,7 @@ export default function EmailPage() {
           </div>
 
           <div className="border-t border-border p-4">
-            <div className="flex items-end gap-3">
+            <div className="flex gap-3">
               <textarea
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
@@ -471,17 +471,18 @@ export default function EmailPage() {
                     sendAiMessage();
                   }
                 }}
-                rows={2}
+                rows={3}
                 placeholder="E.g., Draft a renewal reminder for Rahul Sharma's LIC policy"
-                className="flex-1 resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground transition max-h-24"
+                className="flex-1 resize-none rounded-lg border border-border bg-background px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground transition"
               />
               <button
                 onClick={sendAiMessage}
                 disabled={aiLoading || !aiInput.trim()}
-                className="h-12 w-12 shrink-0 rounded-lg bg-foreground text-background flex items-center justify-center hover:opacity-90 transition disabled:opacity-40 shadow-sm"
+                className="h-full px-5 shrink-0 rounded-lg bg-foreground text-background flex items-center justify-center gap-2 hover:opacity-90 transition disabled:opacity-40 shadow-sm font-medium text-sm"
                 aria-label="Send"
               >
-                <Send size={18} />
+                <Send size={16} />
+                Ask AI
               </button>
             </div>
           </div>
