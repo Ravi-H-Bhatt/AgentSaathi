@@ -11,7 +11,7 @@ interface Msg {
 const WELCOME: Msg = {
   role: "assistant",
   content:
-    "Namaste! I'm your AgentSaathi assistant. Ask me about your own clients and policies (e.g. “What policies does Rahul Sharma have?”), draft client emails (e.g. “Draft a renewal email for Rahul Sharma”), or general questions about insurance, mutual funds, and finance in India. For general questions I'll search the web when it's enabled.",
+    "Namaste! I'm your AgentSaathi assistant. Ask me about your clients, policies, draft emails, or general insurance and finance questions in India.",
 };
 
 export function Assistant() {
@@ -47,11 +47,25 @@ export function Assistant() {
         }),
       });
       const data = await res.json();
+      
+      // Check for errors or malformed responses
+      let answer = data.answer || "";
+      
+      // If response contains tool call syntax or technical errors, show friendly message
+      if (!answer || answer.includes("web_search") || answer.includes("tool_call") || answer.includes("function") || answer.length < 10) {
+        answer = "I'm having trouble processing that request right now. Please try again in a moment.";
+      }
+      
+      // Check for other error patterns
+      if (answer.toLowerCase().includes("error") || answer.toLowerCase().includes("failed")) {
+        answer = "I'm experiencing some technical difficulties. Please try again shortly.";
+      }
+      
       setMessages([
         ...next,
         {
           role: "assistant",
-          content: data.answer || "Sorry, something went wrong.",
+          content: answer,
         },
       ]);
     } catch {

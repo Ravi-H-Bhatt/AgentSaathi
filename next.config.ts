@@ -5,8 +5,6 @@ const nextConfig: NextConfig = {
   devIndicators: {
     position: "bottom-right",
   },
-  // pdf-parse pulls in pdfjs + canvas-ish deps that must not be bundled.
-  serverExternalPackages: ["pdf-parse"],
   images: {
     remotePatterns: [
       // Google account profile images.

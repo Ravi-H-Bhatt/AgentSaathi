@@ -5,17 +5,17 @@ import { dirname, join } from "path";
 /**
  * Extract the text layer from a PDF buffer using pdfjs-dist directly.
  *
- * Vercel/serverless fix: Point to the actual worker file in node_modules.
+ * Vercel/serverless fix: Use CDN-hosted worker for reliable serverless operation.
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     // Import pdfjs-dist
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     
-    // Point to the worker file in node_modules
-    // In serverless, this will be bundled correctly by Vercel
-    const workerPath = "pdfjs-dist/legacy/build/pdf.worker.mjs";
-    pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
+    // Use CDN-hosted worker - this works reliably in serverless environments
+    // Version must match the installed pdfjs-dist version (5.4.296)
+    pdfjs.GlobalWorkerOptions.workerSrc = 
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.296/legacy/build/pdf.worker.min.mjs";
 
     // Load the PDF document
     const loadingTask = pdfjs.getDocument({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,10 +14,13 @@ import {
   LogOut,
   UsersRound,
   MessageSquare,
+  Mail,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
 import { TeamChat } from "@/components/TeamChat";
+import { EmailComposer } from "@/components/EmailComposer";
+import { ProfileEditor } from "@/components/ProfileEditor";
 import { ClockWidget } from "@/components/ClockWidget";
 import type { Permissions } from "@/lib/types";
 
@@ -41,7 +44,10 @@ export function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<"ai" | "chat">("ai");
+  const [drawerTab, setDrawerTab] = useState<"ai" | "chat" | "email">("ai");
+  const [hasUnread, setHasUnread] = useState(false);
+  const [lastCheckTime, setLastCheckTime] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState(agentName);
 
   // Build nav based on role/permissions.
   const nav: { href: string; label: string; icon: typeof LayoutDashboard }[] = [
@@ -57,6 +63,45 @@ export function AppShell({
 
   const showAssistant = !isColleague || permissions.ai;
 
+  // Check for unread messages
+  const checkUnread = useCallback(async () => {
+    try {
+      const url = lastCheckTime 
+        ? `/api/chat?since=${encodeURIComponent(lastCheckTime)}`
+        : "/api/chat";
+      const res = await fetch(url);
+      const data = await res.json();
+      const messages = data.messages || [];
+      if (messages.length > 0) {
+        const latestTime = messages[messages.length - 1].created_at;
+        setLastCheckTime(latestTime);
+        // Only show unread if drawer is closed and message is from someone else
+        if (!drawerOpen) {
+          const hasNewFromOthers = messages.some((m: any) => m.sender_id !== agentId);
+          if (hasNewFromOthers) {
+            setHasUnread(true);
+          }
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  }, [lastCheckTime, drawerOpen, agentId]);
+
+  // Poll for new messages every 8 seconds
+  useEffect(() => {
+    checkUnread();
+    const interval = setInterval(checkUnread, 8000);
+    return () => clearInterval(interval);
+  }, [checkUnread]);
+
+  // Clear unread when drawer opens to chat tab
+  useEffect(() => {
+    if (drawerOpen && drawerTab === "chat") {
+      setHasUnread(false);
+    }
+  }, [drawerOpen, drawerTab]);
+
   const SidebarContent = (
     <div className="flex flex-col h-full">
       <div className="h-16 flex items-center px-5 border-b border-border">
@@ -70,6 +115,7 @@ export function AppShell({
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
+              prefetch={true}
               className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 active
                   ? "bg-foreground text-background shadow-sm"
@@ -104,23 +150,42 @@ export function AppShell({
             setDrawerTab("chat");
             setDrawerOpen(true);
             setMobileOpen(false);
+            setHasUnread(false);
           }}
-          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4 transition-all duration-200"
+          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4 transition-all duration-200 relative"
         >
           <MessageSquare size={18} className="transition-transform duration-200 group-hover:scale-110" />
           Team Chat
+          {hasUnread && (
+            <span className="absolute left-1 top-2 h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+          )}
+        </button>
+        <button
+          onClick={() => {
+            setDrawerTab("email");
+            setDrawerOpen(true);
+            setMobileOpen(false);
+          }}
+          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4 transition-all duration-200"
+        >
+          <Mail size={18} className="transition-transform duration-200 group-hover:scale-110" />
+          Compose Email
         </button>
       </nav>
       <div className="p-3 border-t border-border">
         <div className="flex items-center gap-3 px-2 py-2">
           <div className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-semibold shrink-0">
-            {agentName.charAt(0).toUpperCase()}
+            {displayName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium truncate">{agentName}</p>
+            <p className="text-sm font-medium truncate">{displayName}</p>
             <p className="text-xs text-muted truncate">{agentEmail}</p>
           </div>
         </div>
+        <ProfileEditor
+          currentName={displayName}
+          onUpdate={(newName) => setDisplayName(newName)}
+        />
         <form action="/auth/signout" method="post" className="mt-1">
           <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted hover:bg-black/[.04] hover:text-foreground transition">
             <LogOut size={16} />
@@ -187,12 +252,19 @@ export function AppShell({
               </button>
             )}
             <button
-              onClick={() => { setDrawerTab("chat"); setDrawerOpen(true); }}
-              className="group flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full border border-border hover:bg-black/[.04] transition-all duration-200"
+              onClick={() => { 
+                setDrawerTab("chat"); 
+                setDrawerOpen(true); 
+                setHasUnread(false);
+              }}
+              className="group relative flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full border border-border hover:bg-black/[.04] transition-all duration-200"
               title="Team Chat"
             >
               <MessageSquare size={16} />
               <span className="hidden sm:inline">Chat</span>
+              {hasUnread && (
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-green-500 rounded-full animate-pulse border border-background" />
+              )}
             </button>
           </div>
         </header>
@@ -235,14 +307,30 @@ export function AppShell({
                     </button>
                   )}
                   <button
-                    onClick={() => setDrawerTab("chat")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                    onClick={() => {
+                      setDrawerTab("chat");
+                      setHasUnread(false);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition relative ${
                       drawerTab === "chat"
                         ? "bg-foreground text-background"
                         : "text-muted hover:bg-black/[.04] hover:text-foreground"
                     }`}
                   >
-                    <MessageSquare size={15} /> Team Chat
+                    <MessageSquare size={15} /> Chat
+                    {hasUnread && drawerTab !== "chat" && (
+                      <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-green-500 rounded-full animate-pulse" />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setDrawerTab("email")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                      drawerTab === "email"
+                        ? "bg-foreground text-background"
+                        : "text-muted hover:bg-black/[.04] hover:text-foreground"
+                    }`}
+                  >
+                    <Mail size={15} /> Email
                   </button>
                 </div>
                 <button
@@ -258,8 +346,10 @@ export function AppShell({
               <div className="flex-1 min-h-0 flex flex-col">
                 {drawerTab === "ai" && showAssistant ? (
                   <Assistant />
-                ) : (
+                ) : drawerTab === "chat" ? (
                   <TeamChat currentUserId={agentId} />
+                ) : (
+                  <EmailComposer agentName={displayName} />
                 )}
               </div>
             </motion.div>

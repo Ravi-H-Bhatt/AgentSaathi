@@ -163,7 +163,15 @@ export async function answerGrounded(
 
     const toolCalls = msg.tool_calls;
     if (!toolCalls || toolCalls.length === 0) {
-      return msg.content || "I couldn't generate a response. Please try again.";
+      // Return the actual message content, but ensure it's user-friendly
+      const content = msg.content || "I couldn't generate a response. Please try again.";
+      
+      // If content looks like it contains tool syntax or errors, return friendly message
+      if (content.includes("{") && content.includes("}") && content.includes("tool")) {
+        return "I'm having trouble processing your request right now. Please try again in a moment.";
+      }
+      
+      return content;
     }
 
     // Record the assistant's tool-call turn.
@@ -300,4 +308,80 @@ async function runTool(
   }
 
   return JSON.stringify({ error: `Unknown tool: ${name}` });
+}
+
+
+/**
+ * AI-powered email drafting assistant.
+ * Returns structured email data (to, subject, body) when user asks to draft an email.
+ */
+export async function draftEmailWithAi(
+  question: string,
+  context: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+  agentName: string
+): Promise<{ answer: string; email?: { to: string; cc?: string; subject: string; body: string } }> {
+  const system = [
+    "You are an AI email drafting assistant for an insurance agent in Gujarat, India.",
+    "Your job is to help draft professional, courteous emails to clients about their policies.",
+    "",
+    "CONTEXT (agent's clients and policies):",
+    context || "(no data available)",
+    "",
+    "INSTRUCTIONS:",
+    "1. When the user asks to draft/write/compose an email:",
+    "   - Identify the client and policy from CONTEXT",
+    "   - If multiple matches exist, ask the user to clarify which one",
+    "   - If the client/policy is not in CONTEXT, say so and ask for details",
+    "2. Once you know which client/policy, generate a professional email with:",
+    "   - A clear, descriptive subject line",
+    "   - A professional, courteous body (in English unless asked otherwise)",
+    "   - Include relevant policy details from CONTEXT",
+    "   - Keep it concise and actionable",
+    "3. Return your response as JSON with this structure:",
+    '   { "answer": "I\'ve drafted the email for you!", "email": { "to": "client@example.com", "subject": "...", "body": "..." } }',
+    "4. For general questions (not about drafting), respond conversationally without the email field.",
+    "",
+    "TONE: Professional, friendly, and helpful. You represent an insurance agent.",
+    "LANGUAGE: Use Indian English, ₹ for currency, lakh/crore for large numbers when natural.",
+    `SIGNATURE: The agent's name is "${agentName}" - do NOT include signature in body (system adds it automatically).`,
+  ].join("\n");
+
+  const completion = await groqClient().chat.completions.create({
+    model: MODEL,
+    temperature: 0.3,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      ...history.slice(-4).map((h) => ({ role: h.role, content: h.content })),
+      { role: "user", content: question },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content || "{}";
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {
+      answer: "I'm having trouble processing that. Could you rephrase?",
+    };
+  }
+
+  // Return structured response
+  if (parsed.email && parsed.email.to && parsed.email.subject && parsed.email.body) {
+    return {
+      answer: parsed.answer || "I've drafted the email for you! Review and edit as needed.",
+      email: {
+        to: parsed.email.to,
+        cc: parsed.email.cc || undefined,
+        subject: parsed.email.subject,
+        body: parsed.email.body,
+      },
+    };
+  }
+
+  return {
+    answer: parsed.answer || "How can I help you draft an email?",
+  };
 }

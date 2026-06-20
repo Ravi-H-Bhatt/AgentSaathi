@@ -1,10 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
-import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
-import { answerGrounded } from "@/lib/groq";
-import { webSearchConfigured } from "@/lib/websearch";
+import { ownerIdFor, permissionsFor } from "@/lib/team";
+import { draftEmailWithAi } from "@/lib/groq";
 import type { Client, Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -13,7 +11,7 @@ function fmtMoney(n: number | null) {
   return n == null ? "—" : "₹" + n.toLocaleString("en-IN");
 }
 
-/** Build a compact context string from the agent's own clients/policies. */
+/** Build context from agent's clients/policies for AI email drafting */
 function buildContext(clients: Client[], policies: Policy[]): string {
   const byClient = new Map<string, Policy[]>();
   for (const p of policies) {
@@ -62,11 +60,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing question" }, { status: 400 });
   }
 
-  // Ensure session is valid (RLS would also enforce ownership).
-  await createClient();
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
 
+  // Load agent's data
   const { data: clients } = await db
     .from("clients")
     .select("*")
@@ -81,31 +78,23 @@ export async function POST(request: NextRequest) {
     (policies as Policy[]) || []
   );
 
-  // Record the search for the colleagues activity feed (best-effort).
-  await logActivity(agent, "ai_search", question.slice(0, 140));
-
   try {
-    const answer = await answerGrounded(question, context, history || [], {
-      webEnabled: webSearchConfigured(),
-    });
-    
-    // Sanitize the answer to ensure no tool syntax leaks through
-    let sanitized = answer;
-    if (!sanitized || sanitized.trim().length === 0) {
-      sanitized = "I'm having trouble answering that right now. Please try again.";
-    }
-    
-    // Check for tool call syntax that shouldn't be exposed
-    if (sanitized.includes("<web_search") || sanitized.includes("tool_call") || sanitized.includes("function_call")) {
-      sanitized = "I'm experiencing technical difficulties. Please rephrase your question or try again later.";
-    }
-    
-    return NextResponse.json({ answer: sanitized });
+    const result = await draftEmailWithAi(
+      question,
+      context,
+      history || [],
+      agent.full_name || agent.email
+    );
+
+    return NextResponse.json(result);
   } catch (err) {
-    console.error("[assistant] Error:", err);
+    console.error("[ai-draft] Error:", err);
     return NextResponse.json(
-      { answer: "I'm temporarily unavailable. Please try again in a moment." },
-      { status: 200 } // Return 200 so client shows friendly message
+      {
+        answer:
+          "I'm having trouble drafting that email right now. Please try again.",
+      },
+      { status: 200 }
     );
   }
 }
