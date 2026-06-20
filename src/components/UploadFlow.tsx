@@ -126,6 +126,9 @@ export function UploadFlow() {
         skippedNoName: data.skippedNoName ?? 0,
         clientsCreated: data.clientsCreated ?? 0,
       });
+      // Invalidate the Next.js router cache so dashboard/clients show the new
+      // data immediately (otherwise navigation serves a stale cached payload).
+      router.refresh();
       setStep("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");

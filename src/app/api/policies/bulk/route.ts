@@ -172,9 +172,19 @@ export async function POST(request: NextRequest) {
   let created = 0;
   for (let i = 0; i < policyRows.length; i += 500) {
     const chunk = policyRows.slice(i, i + 500);
-    const { error, count } = await db
+    let { error, count } = await db
       .from("policies")
       .insert(chunk, { count: "exact" });
+
+    // Graceful fallback: if the DB doesn't have the `mode` column yet
+    // (migration 0001 not run), retry without it instead of failing the import.
+    if (error && /mode/i.test(error.message) && /column/i.test(error.message)) {
+      const chunkNoMode = chunk.map(({ mode: _mode, ...rest }) => rest);
+      ({ error, count } = await db
+        .from("policies")
+        .insert(chunkNoMode, { count: "exact" }));
+    }
+
     if (error) {
       return NextResponse.json(
         {
