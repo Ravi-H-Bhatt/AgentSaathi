@@ -108,14 +108,14 @@ export async function POST(request: NextRequest) {
       text: body.trim(),
       html,
       attachments: attachments.length > 0 ? attachments : undefined,
-      // Anti-spam headers
+      replyTo: fromEmail,
+      // Deliverability headers. NOTE: we deliberately do NOT set X-Priority/
+      // Importance:high — those are a well-known spam signal and hurt inboxing.
       headers: {
-        "X-Priority": "1",
-        "X-MSMail-Priority": "High",
-        "Importance": "high",
         "X-Mailer": "AgentSaathi",
+        // RFC 8058 one-click unsubscribe — mailbox providers reward this.
         "List-Unsubscribe": `<mailto:${fromEmail}?subject=unsubscribe>`,
-        "Reply-To": fromEmail,
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
       },
     };
 

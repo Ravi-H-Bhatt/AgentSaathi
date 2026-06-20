@@ -284,11 +284,42 @@ export function ColleaguesManager({
             transition={{ duration: 0.2 }}
           >
             {timeEntries.length === 0 ? (
-              <div className="rounded-2xl border border-border bg-card py-14 text-center text-muted text-sm">
-                No time entries yet. Colleagues clock in from the top bar.
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+                  {colleagues.map((c) => (
+                    <div key={c.id} className="flex items-center justify-between px-5 py-4 gap-4">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{c.name || c.email}</p>
+                        <p className="text-sm text-muted">No time entries yet</p>
+                      </div>
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-full shrink-0 bg-black/[.04] text-muted">
+                        Not clocked in
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {colleagues.length === 0 && (
+                  <div className="rounded-2xl border border-border bg-card py-14 text-center text-muted text-sm">
+                    No colleagues yet. Invite teammates to track their time.
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+                {/* Colleagues with NO time entries — still listed so the team roster is complete. */}
+                {colleagues
+                  .filter((c) => !timeEntries.some((t) => t.agentId === c.id))
+                  .map((c) => (
+                    <div key={`none-${c.id}`} className="flex items-center justify-between px-5 py-4 gap-4">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{c.name || c.email}</p>
+                        <p className="text-sm text-muted">No time entries yet</p>
+                      </div>
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-full shrink-0 bg-black/[.04] text-muted">
+                        Not clocked in
+                      </span>
+                    </div>
+                  ))}
                 {timeEntries.map((t) => (
                   <div
                     key={t.id}

@@ -107,6 +107,27 @@ export async function POST(request: NextRequest) {
   const startDate = dateOrNull(body.start_date);
   const renewalDate = dateOrNull(body.renewal_date);
 
+  // Strong dedup: a policy number is globally unique. If this owner already has
+  // a policy with the same number (regardless of which client it's under), treat
+  // the upload as a duplicate so the same PDF can't create a second copy.
+  if (policyNumber) {
+    const { data: byNumber } = await db
+      .from("policies")
+      .select("id, client_id")
+      .eq("agent_id", ownerId)
+      .eq("policy_number", policyNumber)
+      .limit(1)
+      .maybeSingle();
+    if (byNumber) {
+      return NextResponse.json({
+        ok: true,
+        clientId: byNumber.client_id || clientId,
+        policyId: byNumber.id,
+        duplicate: true,
+      });
+    }
+  }
+
   // Deduplication: skip storing a policy that is identical to one the same
   // client already has. We compare every meaningful field, so only truly
   // unique policies get inserted — re-uploading the same document is a no-op.
