@@ -11,34 +11,53 @@ function fmtMoney(n: number | null) {
   return n == null ? "—" : "₹" + n.toLocaleString("en-IN");
 }
 
-/** Build context from agent's clients/policies for AI email drafting */
-function buildContext(clients: Client[], policies: Policy[]): string {
+/** Build context from agent's clients/policies for AI email drafting.
+ *  Filtered to the question + size-capped to stay under the model TPM limit. */
+function buildContext(clients: Client[], policies: Policy[], question: string): string {
   const byClient = new Map<string, Policy[]>();
   for (const p of policies) {
     const arr = byClient.get(p.client_id) || [];
     arr.push(p);
     byClient.set(p.client_id, arr);
   }
+
+  const qWords = question
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3);
+
+  const scored = clients.map((c) => {
+    const name = (c.full_name || "").toLowerCase();
+    const score = qWords.reduce((s, w) => (name.includes(w) ? s + 1 : s), 0);
+    return { client: c, score };
+  });
+  const matched = scored.filter((s) => s.score > 0).map((s) => s.client);
+  const selected = matched.length > 0 ? matched : clients.slice(0, 30);
+
+  const MAX_CHARS = 10000;
   const lines: string[] = [];
-  for (const c of clients) {
-    lines.push(
-      `CLIENT: ${c.full_name}${c.email ? ` | email: ${c.email}` : ""}${
-        c.phone ? ` | phone: ${c.phone}` : ""
-      }${c.age != null ? ` | age: ${c.age}` : ""}`
-    );
+  let size = 0;
+  for (const c of selected) {
+    const head = `CLIENT: ${c.full_name}${c.email ? ` | email: ${c.email}` : ""}${
+      c.phone ? ` | phone: ${c.phone}` : ""
+    }${c.age != null ? ` | age: ${c.age}` : ""}`;
+    if (size + head.length > MAX_CHARS) break;
+    lines.push(head);
+    size += head.length;
+
     const ps = byClient.get(c.id) || [];
-    if (ps.length === 0) {
-      lines.push("  (no policies on record)");
-    }
+    if (ps.length === 0) lines.push("  (no policies on record)");
     for (const p of ps) {
-      lines.push(
-        `  POLICY: company=${p.company || "—"}, type=${
-          p.policy_type || "—"
-        }, number=${p.policy_number || "—"}, sum_insured=${fmtMoney(
-          p.sum_insured
-        )}, premium=${fmtMoney(p.premium)}, renewal=${p.renewal_date || "—"}`
-      );
+      const line = `  POLICY: company=${p.company || "—"}, type=${
+        p.policy_type || "—"
+      }, number=${p.policy_number || "—"}, sum_insured=${fmtMoney(
+        p.sum_insured
+      )}, premium=${fmtMoney(p.premium)}, renewal=${p.renewal_date || "—"}`;
+      if (size + line.length > MAX_CHARS) break;
+      lines.push(line);
+      size += line.length;
     }
+    if (size >= MAX_CHARS) break;
   }
   return lines.join("\n");
 }
@@ -75,7 +94,8 @@ export async function POST(request: NextRequest) {
 
   const context = buildContext(
     (clients as Client[]) || [],
-    (policies as Policy[]) || []
+    (policies as Policy[]) || [],
+    question
   );
 
   try {
