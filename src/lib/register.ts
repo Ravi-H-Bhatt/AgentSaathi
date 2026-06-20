@@ -82,10 +82,16 @@ function splitGluedDate(token: string): string[] {
  */
 function tokenize(text: string): string[] {
   const tokens: string[] = [];
-  for (const rawLine of text.split(/\r?\n/)) {
+  // Some extractors (serverless unpdf) return the whole document as one line
+  // with no newlines. Line-based junk filtering only applies when we actually
+  // have multiple lines; otherwise we tokenize the whole stream by whitespace.
+  const lines = text.split(/\r?\n/);
+  const multiline = lines.length > 3;
+
+  for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (JUNK_LINE_RE.test(line)) continue;
+    if (multiline && JUNK_LINE_RE.test(line)) continue;
     for (const piece of line.split(/\s+/)) {
       if (!piece) continue;
       for (const sub of splitGluedDate(piece)) {

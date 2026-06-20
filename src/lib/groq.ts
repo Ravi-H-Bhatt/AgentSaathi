@@ -323,28 +323,28 @@ export async function draftEmailWithAi(
 ): Promise<{ answer: string; email?: { to: string; cc?: string; subject: string; body: string } }> {
   const system = [
     "You are an AI email drafting assistant for an insurance agent in Gujarat, India.",
-    "Your job is to help draft professional, courteous emails to clients about their policies.",
+    "Your job is to draft professional, courteous emails to clients about their policies.",
     "",
     "CONTEXT (agent's clients and policies):",
     context || "(no data available)",
     "",
     "INSTRUCTIONS:",
-    "1. When the user asks to draft/write/compose an email:",
-    "   - Identify the client and policy from CONTEXT",
-    "   - If multiple matches exist, ask the user to clarify which one",
-    "   - If the client/policy is not in CONTEXT, say so and ask for details",
-    "2. Once you know which client/policy, generate a professional email with:",
-    "   - A clear, descriptive subject line",
-    "   - A professional, courteous body (in English unless asked otherwise)",
-    "   - Include relevant policy details from CONTEXT",
-    "   - Keep it concise and actionable",
-    "3. Return your response as JSON with this structure:",
-    '   { "answer": "I\'ve drafted the email for you!", "email": { "to": "client@example.com", "subject": "...", "body": "..." } }',
-    "4. For general questions (not about drafting), respond conversationally without the email field.",
+    "1. ALWAYS produce a usable email draft. Never reply with only a confirmation sentence.",
+    "2. If the user names a client found in CONTEXT, use their real email, policy company,",
+    "   type, number, sum insured, premium and renewal date in the draft.",
+    "3. If MULTIPLE clients match the same name, pick the most likely one and draft anyway,",
+    "   then mention in 'answer' that there were multiple matches so the agent can adjust.",
+    "4. If the client/policy is NOT in CONTEXT, or the request is generic (e.g. a thank-you",
+    "   note with no specific client), STILL write a complete professional template. Leave",
+    "   the 'to' field empty ('') so the agent fills the recipient, and use a neutral",
+    "   greeting like 'Dear Valued Client'.",
+    "5. Output STRICT JSON only, with this exact shape:",
+    '   { "answer": "<one short sentence>", "email": { "to": "", "cc": "", "subject": "<subject>", "body": "<full body>" } }',
+    "   - 'subject' and 'body' are REQUIRED and must never be empty.",
+    "   - 'to'/'cc' may be empty strings when unknown.",
     "",
-    "TONE: Professional, friendly, and helpful. You represent an insurance agent.",
-    "LANGUAGE: Use Indian English, ₹ for currency, lakh/crore for large numbers when natural.",
-    `SIGNATURE: The agent's name is "${agentName}" - do NOT include signature in body (system adds it automatically).`,
+    "TONE: Professional, friendly. LANGUAGE: Indian English, INR for money, lakh/crore where natural.",
+    `SIGNATURE: The agent's name is "${agentName}". Do NOT add a signature in the body (the system appends it).`,
   ].join("\n");
 
   const completion = await groqClient().chat.completions.create({
@@ -363,25 +363,27 @@ export async function draftEmailWithAi(
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return {
-      answer: "I'm having trouble processing that. Could you rephrase?",
-    };
+    return { answer: "I'm having trouble processing that. Could you rephrase?" };
   }
 
-  // Return structured response
-  if (parsed.email && parsed.email.to && parsed.email.subject && parsed.email.body) {
+  const e = parsed.email || {};
+  // An email is usable as long as it has a subject and body. The recipient can
+  // be filled in by the agent, so we do NOT require `to`.
+  if (e.subject && e.body) {
     return {
-      answer: parsed.answer || "I've drafted the email for you! Review and edit as needed.",
+      answer: parsed.answer || "I've drafted the email — review it on the left and add the recipient if needed.",
       email: {
-        to: parsed.email.to,
-        cc: parsed.email.cc || undefined,
-        subject: parsed.email.subject,
-        body: parsed.email.body,
+        to: e.to || "",
+        cc: e.cc || undefined,
+        subject: e.subject,
+        body: e.body,
       },
     };
   }
 
   return {
-    answer: parsed.answer || "How can I help you draft an email?",
+    answer:
+      parsed.answer ||
+      "I couldn't build a draft from that. Tell me the client name (or the kind of email) and I'll write it.",
   };
 }
