@@ -323,60 +323,85 @@ export async function draftEmailWithAi(
 ): Promise<{ answer: string; email?: { to: string; cc?: string; subject: string; body: string } }> {
   const system = [
     "You are an AI email drafting assistant for an insurance agent in Gujarat, India.",
-    "Your job is to draft professional, courteous emails to clients about their policies.",
+    "You ALWAYS return a single JSON object and nothing else.",
     "",
     "CONTEXT (agent's clients and policies):",
     context || "(no data available)",
     "",
-    "INSTRUCTIONS:",
-    "1. ALWAYS produce a usable email draft. Never reply with only a confirmation sentence.",
-    "2. If the user names a client found in CONTEXT, use their real email, policy company,",
-    "   type, number, sum insured, premium and renewal date in the draft.",
-    "3. If MULTIPLE clients match the same name, pick the most likely one and draft anyway,",
-    "   then mention in 'answer' that there were multiple matches so the agent can adjust.",
-    "4. If the client/policy is NOT in CONTEXT, or the request is generic (e.g. a thank-you",
-    "   note with no specific client), STILL write a complete professional template. Leave",
-    "   the 'to' field empty ('') so the agent fills the recipient, and use a neutral",
-    "   greeting like 'Dear Valued Client'.",
-    "5. Output STRICT JSON only, with this exact shape:",
-    '   { "answer": "<one short sentence>", "email": { "to": "", "cc": "", "subject": "<subject>", "body": "<full body>" } }',
-    "   - 'subject' and 'body' are REQUIRED and must never be empty.",
-    "   - 'to'/'cc' may be empty strings when unknown.",
+    "TASK: Write one complete, professional email based on the user's request.",
+    "- If the user names a client in CONTEXT, use their real email + policy details.",
+    "- If multiple clients match, pick the most likely and note it in 'answer'.",
+    "- If no specific client (generic note like a birthday wish or thank-you), still",
+    "  write a complete template, leave 'to' empty, and greet 'Dear Valued Client'.",
     "",
-    "TONE: Professional, friendly. LANGUAGE: Indian English, INR for money, lakh/crore where natural.",
-    `SIGNATURE: The agent's name is "${agentName}". Do NOT add a signature in the body (the system appends it).`,
+    "OUTPUT FORMAT — return EXACTLY this JSON shape and these keys, nothing else:",
+    '{',
+    '  "answer": "one short sentence to the agent",',
+    '  "email": {',
+    '    "to": "recipient email or empty string",',
+    '    "cc": "",',
+    '    "subject": "the email subject line",',
+    '    "body": "the full email body text"',
+    '  }',
+    '}',
+    "RULES: 'subject' and 'body' must be non-empty strings. Do NOT add other keys.",
+    "Do NOT include a signature in 'body' — the system appends the agent's name.",
+    `The agent's name is "${agentName}". Use Indian English and INR for money.`,
+    "",
+    "EXAMPLE for 'birthday wish for a valued client':",
+    '{ "answer": "Here is a warm birthday email you can send.", "email": { "to": "", "cc": "", "subject": "Warm Birthday Wishes from AgentSaathi", "body": "Dear Valued Client,\\n\\nWishing you a very happy birthday! ..." } }',
   ].join("\n");
 
-  const completion = await groqClient().chat.completions.create({
-    model: MODEL,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      ...history.slice(-4).map((h) => ({ role: h.role, content: h.content })),
-      { role: "user", content: question },
-    ],
-  });
+  let completion;
+  try {
+    completion = await groqClient().chat.completions.create({
+      model: MODEL,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        ...history.slice(-4).map((h) => ({ role: h.role, content: h.content })),
+        { role: "user", content: question },
+      ],
+    });
+  } catch (err) {
+    console.error("[draftEmailWithAi] groq call failed:", err instanceof Error ? err.message : err);
+    return { answer: "The AI service is unavailable right now. Please try again in a moment." };
+  }
 
   const raw = completion.choices[0]?.message?.content || "{}";
   let parsed: any = {};
   try {
     parsed = JSON.parse(raw);
   } catch {
+    // Model returned prose instead of JSON — use it as the email body directly.
+    if (raw.trim().length > 20) {
+      return {
+        answer: "I've drafted the email — review it on the left.",
+        email: { to: "", subject: "Message from your insurance agent", body: raw.trim() },
+      };
+    }
     return { answer: "I'm having trouble processing that. Could you rephrase?" };
   }
 
-  const e = parsed.email || {};
-  // An email is usable as long as it has a subject and body. The recipient can
-  // be filled in by the agent, so we do NOT require `to`.
-  if (e.subject && e.body) {
+  // Tolerant extraction: accept the documented shape OR common alternate keys.
+  const e = parsed.email || parsed;
+  const subject =
+    e.subject || parsed.subject || parsed.title || "Message from your insurance agent";
+  const body =
+    e.body || parsed.body || parsed.message || parsed.content || parsed.text || "";
+
+  if (body && body.toString().trim().length > 0) {
     return {
-      answer: parsed.answer || "I've drafted the email — review it on the left and add the recipient if needed.",
+      answer:
+        parsed.answer ||
+        parsed.message_to_agent ||
+        "I've drafted the email — review it on the left and add the recipient if needed.",
       email: {
-        to: e.to || "",
-        cc: e.cc || undefined,
-        subject: e.subject,
-        body: e.body,
+        to: e.to || parsed.to || "",
+        cc: e.cc || parsed.cc || undefined,
+        subject: subject.toString(),
+        body: body.toString(),
       },
     };
   }
