@@ -30,21 +30,28 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
   const year = new Date().getFullYear();
   const [view, setView] = useState<"premium" | "count">("premium");
 
-  const { monthly, totalDue, totalSI, busiestMonth } = useMemo(() => {
+  const { monthly, totalDue, totalSI, busiestPremMonth, busiestCountMonth } = useMemo(() => {
     const prem = new Array(12).fill(0);
     const count = new Array(12).fill(0);
     let totalDue = 0;
     let totalSI = 0;
 
     for (const p of policies) {
+      // Total sum insured = full book value (all policies).
       totalSI += p.sum_insured || 0;
+
       if (!p.renewal_date) continue;
       const d = new Date(p.renewal_date);
       if (isNaN(d.getTime())) continue;
+
+      // Analytics chart = ONLY renewals due in the CURRENT year, bucketed by
+      // month. A renewal in May 2012 must not count toward May 2026.
+      if (d.getFullYear() !== year) continue;
+
       const m = d.getMonth();
       prem[m] += p.premium || 0;
       count[m] += 1;
-      totalDue += p.premium || 0;
+      totalDue += p.premium || 0; // premium due to collect THIS year
     }
 
     const monthly = MONTHS.map((label, i) => ({
@@ -52,15 +59,18 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       premium: prem[i],
       count: count[i],
     }));
-    const busiestIdx = prem.indexOf(Math.max(...prem));
+    const maxPrem = Math.max(...prem);
+    const maxCount = Math.max(...count);
     return {
       monthly,
       totalDue,
       totalSI,
-      busiestMonth: busiestIdx >= 0 ? MONTHS[busiestIdx] : "—",
+      busiestPremMonth: maxPrem > 0 ? MONTHS[prem.indexOf(maxPrem)] : "—",
+      busiestCountMonth: maxCount > 0 ? MONTHS[count.indexOf(maxCount)] : "—",
     };
-  }, [policies]);
+  }, [policies, year]);
 
+  const busiestMonth = view === "premium" ? busiestPremMonth : busiestCountMonth;
   const values = monthly.map((m) => (view === "premium" ? m.premium : m.count));
   const max = Math.max(...values, 1);
 
@@ -115,7 +125,7 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
 
       {/* Headline stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border">
-        <Stat icon={<IndianRupee size={15} />} label="Total premium / year" value={inr(totalDue)} />
+        <Stat icon={<IndianRupee size={15} />} label={`Premium due in ${year}`} value={inr(totalDue)} />
         <Stat icon={<TrendingUp size={15} />} label="Total sum insured" value={inr(totalSI)} />
         <Stat icon={<CalendarClock size={15} />} label="Busiest renewal month" value={busiestMonth} />
       </div>
