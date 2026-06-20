@@ -148,7 +148,7 @@ export async function answerGrounded(
 
   // Tool-calling loop (bounded to avoid runaway calls).
   for (let step = 0; step < 4; step++) {
-    const completion = await groqClient().chat.completions.create({
+    const completion = await chatWithBackoff({
       model: MODEL,
       temperature: 0.2,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -178,7 +178,7 @@ export async function answerGrounded(
     messages.push({
       role: "assistant",
       content: msg.content ?? null,
-      tool_calls: toolCalls.map((tc) => ({
+      tool_calls: toolCalls.map((tc: { id: string; function: { name: string; arguments: string } }) => ({
         id: tc.id,
         type: "function",
         function: {
@@ -202,7 +202,7 @@ export async function answerGrounded(
   }
 
   // Fallback: ask for a final answer without tools.
-  const final = await groqClient().chat.completions.create({
+  const final = await chatWithBackoff({
     model: MODEL,
     temperature: 0.2,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -212,6 +212,45 @@ export async function answerGrounded(
     final.choices[0]?.message?.content ||
     "I couldn't generate a response. Please try again."
   );
+}
+
+/**
+ * Call Groq chat.completions, automatically recovering from 413
+ * "request too large" errors by trimming the oldest non-system messages and
+ * shrinking long message contents, then retrying. This keeps the assistant
+ * working even when CONTEXT + tool output approaches the token-per-minute cap.
+ */
+async function chatWithBackoff(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  params: any
+): Promise<any> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let messages: any[] = params.messages;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await groqClient().chat.completions.create({ ...params, messages });
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      const isTooLarge =
+        status === 413 ||
+        (err instanceof Error && /too large|rate_limit|tokens per minute|413/i.test(err.message));
+      if (!isTooLarge || attempt === 3) throw err;
+
+      // Trim: keep the system message + the most recent turns, and clamp the
+      // size of each remaining message's content.
+      const system = messages.find((m) => m.role === "system");
+      const rest = messages.filter((m) => m.role !== "system");
+      const keep = rest.slice(-Math.max(2, Math.ceil(rest.length / 2)));
+      const clamp = (c: unknown) =>
+        typeof c === "string" && c.length > 4000 ? c.slice(0, 4000) + " …[trimmed]" : c;
+      messages = [
+        ...(system ? [{ ...system, content: clamp(system.content) }] : []),
+        ...keep.map((m) => ({ ...m, content: clamp(m.content) })),
+      ];
+    }
+  }
+  // Unreachable, but satisfies the type checker.
+  return groqClient().chat.completions.create({ ...params, messages });
 }
 
 function buildTools(webEnabled: boolean) {
@@ -292,12 +331,14 @@ async function runTool(
     try {
       const { webSearch } = await import("@/lib/websearch");
       const { answer, results } = await webSearch(String(args.query || ""));
+      // Cap to the top 4 results with short snippets so tool output stays small
+      // and the follow-up completion never exceeds the model's token budget.
       return JSON.stringify({
-        answer,
-        results: results.map((r) => ({
+        answer: (answer || "").slice(0, 800),
+        results: results.slice(0, 4).map((r) => ({
           title: r.title,
           url: r.url,
-          snippet: r.content.slice(0, 400),
+          snippet: r.content.slice(0, 200),
         })),
       });
     } catch (e) {
@@ -354,7 +395,7 @@ export async function draftEmailWithAi(
 
   let completion;
   try {
-    completion = await groqClient().chat.completions.create({
+    completion = await chatWithBackoff({
       model: MODEL,
       temperature: 0.3,
       response_format: { type: "json_object" },

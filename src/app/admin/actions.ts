@@ -60,3 +60,13 @@ export async function addPremiumRows(
   await db.from("premium_charts").insert(rows);
   revalidatePath("/admin/premiums");
 }
+
+
+/** Admin-only: mark an error report as resolved (or reopen). */
+export async function setReportStatus(id: string, status: "open" | "resolved") {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") throw new Error("Forbidden");
+  const db = createAdminClient();
+  await db.from("error_reports").update({ status }).eq("id", id);
+  revalidatePath("/admin/reports");
+}

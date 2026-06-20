@@ -2,8 +2,15 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { money, shortDate } from "@/lib/format";
+import { shortDate } from "@/lib/format";
 import type { ClientWithPolicies } from "@/lib/types";
+
+/** Money formatter for PDFs. jsPDF's built-in Helvetica has no Rupee glyph (₹),
+ *  which renders as garbled spacing, so we use "Rs." with Indian grouping. */
+function pdfMoney(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return "Rs. " + Number(n).toLocaleString("en-IN");
+}
 
 /** Generate and download a clean B/W PDF report for a client. */
 export function downloadClientPdf(
@@ -50,8 +57,8 @@ export function downloadClientPdf(
     p.company || "—",
     p.policy_type || "—",
     p.policy_number || "—",
-    money(p.sum_insured),
-    money(p.premium),
+    pdfMoney(p.sum_insured),
+    pdfMoney(p.premium),
     shortDate(p.renewal_date),
   ]);
 
@@ -61,8 +68,16 @@ export function downloadClientPdf(
     body: body.length ? body : [["—", "—", "—", "—", "—", "—"]],
     theme: "grid",
     headStyles: { fillColor: [10, 10, 10], textColor: 255, fontSize: 9 },
-    bodyStyles: { fontSize: 9, textColor: 30 },
+    bodyStyles: { fontSize: 9, textColor: 30, cellPadding: 4 },
     alternateRowStyles: { fillColor: [248, 248, 249] },
+    columnStyles: {
+      0: { cellWidth: 70 },
+      1: { cellWidth: 70 },
+      2: { cellWidth: 80 },
+      3: { cellWidth: 95, halign: "right" },
+      4: { cellWidth: 80, halign: "right" },
+      5: { cellWidth: 70 },
+    },
     margin: { left: 40, right: 40 },
   });
 
@@ -74,8 +89,8 @@ export function downloadClientPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(10, 10, 10);
-  doc.text(`Total sum insured: ${money(totalSI)}`, 40, endY);
-  doc.text(`Total annual premium: ${money(totalPrem)}`, 40, endY + 16);
+  doc.text(`Total sum insured: ${pdfMoney(totalSI)}`, 40, endY);
+  doc.text(`Total annual premium: ${pdfMoney(totalPrem)}`, 40, endY + 16);
 
   doc.save(`${client.full_name.replace(/\s+/g, "_")}_report.pdf`);
 }
@@ -128,8 +143,8 @@ export function downloadAllClientsPdf(
           p.company || "—",
           p.policy_type || "—",
           p.policy_number || "—",
-          money(p.sum_insured),
-          money(p.premium),
+          pdfMoney(p.sum_insured),
+          pdfMoney(p.premium),
           shortDate(p.renewal_date),
         ]);
       });
@@ -144,9 +159,13 @@ export function downloadAllClientsPdf(
     body: body.length ? body : [["—", "—", "—", "—", "—", "—", "—"]],
     theme: "grid",
     headStyles: { fillColor: [10, 10, 10], textColor: 255, fontSize: 8 },
-    bodyStyles: { fontSize: 8, textColor: 30 },
+    bodyStyles: { fontSize: 8, textColor: 30, cellPadding: 3 },
     alternateRowStyles: { fillColor: [248, 248, 249] },
-    columnStyles: { 0: { fontStyle: "bold" } },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 90 },
+      4: { halign: "right", cellWidth: 75 },
+      5: { halign: "right", cellWidth: 65 },
+    },
     margin: { left: 40, right: 40 },
   });
 
@@ -164,8 +183,8 @@ export function downloadAllClientsPdf(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(10, 10, 10);
-  doc.text(`Total sum insured: ${money(totalSI)}`, 40, endY);
-  doc.text(`Total annual premium: ${money(totalPrem)}`, 40, endY + 16);
+  doc.text(`Total sum insured: ${pdfMoney(totalSI)}`, 40, endY);
+  doc.text(`Total annual premium: ${pdfMoney(totalPrem)}`, 40, endY + 16);
 
   doc.save(`AgentSaathi_book_of_business.pdf`);
 }

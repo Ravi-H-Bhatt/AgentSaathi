@@ -5,6 +5,7 @@ import { money, isThisMonth } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
 import { RenewalsList } from "@/components/RenewalsList";
+import { PremiumAnalytics } from "@/components/PremiumAnalytics";
 import type { Client, Policy } from "@/lib/types";
 
 export default async function DashboardPage() {
@@ -51,6 +52,17 @@ export default async function DashboardPage() {
           <StatCard label="Total sum insured" value={money(totalSI)} />
         </Reveal>
       </div>
+
+      <Reveal delay={0.08}>
+        <PremiumAnalytics
+          policies={policies.map((p) => ({
+            premium: p.premium,
+            sum_insured: p.sum_insured,
+            renewal_date: p.renewal_date,
+            mode: p.mode,
+          }))}
+        />
+      </Reveal>
 
       <Reveal delay={0.1}>
         <section className="rounded-2xl border border-border bg-card overflow-hidden">

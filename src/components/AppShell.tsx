@@ -20,6 +20,7 @@ import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
 import { TeamChat } from "@/components/TeamChat";
 import { ProfileEditor } from "@/components/ProfileEditor";
+import { ReportIssue } from "@/components/ReportIssue";
 import { ClockWidget } from "@/components/ClockWidget";
 import type { Permissions } from "@/lib/types";
 
@@ -176,6 +177,7 @@ export function AppShell({
           currentName={displayName}
           onUpdate={(newName) => setDisplayName(newName)}
         />
+        <ReportIssue />
         <form action="/auth/signout" method="post" className="mt-1">
           <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted hover:bg-black/[.04] hover:text-foreground transition">
             <LogOut size={16} />

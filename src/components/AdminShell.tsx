@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, BarChart3, LogOut } from "lucide-react";
+import { Users, BarChart3, LogOut, Flag } from "lucide-react";
 import { Logo } from "@/components/Logo";
 
 const nav = [
   { href: "/admin", label: "Agents", icon: Users },
   { href: "/admin/premiums", label: "Premium charts", icon: BarChart3 },
+  { href: "/admin/reports", label: "Issue reports", icon: Flag },
 ];
 
 export function AdminShell({
