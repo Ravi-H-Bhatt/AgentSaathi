@@ -19,7 +19,6 @@ import {
 import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
 import { TeamChat } from "@/components/TeamChat";
-import { EmailComposer } from "@/components/EmailComposer";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { ClockWidget } from "@/components/ClockWidget";
 import type { Permissions } from "@/lib/types";
@@ -44,7 +43,7 @@ export function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<"ai" | "chat" | "email">("ai");
+  const [drawerTab, setDrawerTab] = useState<"ai" | "chat">("ai");
   const [hasUnread, setHasUnread] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState(agentName);
@@ -57,6 +56,8 @@ export function AppShell({
     nav.push({ href: "/clients", label: "Clients", icon: Users });
   if (!isColleague || permissions.upload)
     nav.push({ href: "/upload", label: "Upload policy", icon: Upload });
+  // Email composer
+  nav.push({ href: "/email", label: "Compose Email", icon: Mail });
   // Only owners manage colleagues.
   if (!isColleague)
     nav.push({ href: "/colleagues", label: "Colleagues", icon: UsersRound });
@@ -159,17 +160,6 @@ export function AppShell({
           {hasUnread && (
             <span className="absolute left-1 top-2 h-2 w-2 bg-green-500 rounded-full animate-pulse" />
           )}
-        </button>
-        <button
-          onClick={() => {
-            setDrawerTab("email");
-            setDrawerOpen(true);
-            setMobileOpen(false);
-          }}
-          className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted hover:bg-black/[.04] hover:text-foreground hover:pl-4 transition-all duration-200"
-        >
-          <Mail size={18} className="transition-transform duration-200 group-hover:scale-110" />
-          Compose Email
         </button>
       </nav>
       <div className="p-3 border-t border-border">
@@ -322,16 +312,6 @@ export function AppShell({
                       <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-green-500 rounded-full animate-pulse" />
                     )}
                   </button>
-                  <button
-                    onClick={() => setDrawerTab("email")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                      drawerTab === "email"
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:bg-black/[.04] hover:text-foreground"
-                    }`}
-                  >
-                    <Mail size={15} /> Email
-                  </button>
                 </div>
                 <button
                   onClick={() => setDrawerOpen(false)}
@@ -346,10 +326,8 @@ export function AppShell({
               <div className="flex-1 min-h-0 flex flex-col">
                 {drawerTab === "ai" && showAssistant ? (
                   <Assistant />
-                ) : drawerTab === "chat" ? (
-                  <TeamChat currentUserId={agentId} />
                 ) : (
-                  <EmailComposer agentName={displayName} />
+                  <TeamChat currentUserId={agentId} />
                 )}
               </div>
             </motion.div>
