@@ -88,18 +88,14 @@ export async function POST(request: NextRequest) {
     const answer = await answerGrounded(question, context, history || [], {
       webEnabled: webSearchConfigured(),
     });
-    
-    // Sanitize the answer to ensure no tool syntax leaks through
-    let sanitized = answer;
-    if (!sanitized || sanitized.trim().length === 0) {
-      sanitized = "I'm having trouble answering that right now. Please try again.";
-    }
-    
-    // Check for tool call syntax that shouldn't be exposed
-    if (sanitized.includes("<web_search") || sanitized.includes("tool_call") || sanitized.includes("function_call")) {
-      sanitized = "I'm experiencing technical difficulties. Please rephrase your question or try again later.";
-    }
-    
+
+    // Only replace genuinely empty answers. Do NOT keyword-filter — words like
+    // "error" or "function" appear in valid finance/insurance answers.
+    const sanitized =
+      answer && answer.trim().length > 0
+        ? answer
+        : "I'm having trouble answering that right now. Please try again.";
+
     return NextResponse.json({ answer: sanitized });
   } catch (err) {
     console.error("[assistant] Error:", err);

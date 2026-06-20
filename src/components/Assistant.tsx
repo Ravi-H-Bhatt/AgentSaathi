@@ -1,11 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Send, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Send, Trash2, Mail } from "lucide-react";
 
 interface Msg {
   role: "user" | "assistant";
   content: string;
+  // Optional email draft attached to an assistant message → shows an action button.
+  email?: { to?: string; cc?: string; subject: string; body: string };
 }
 
 const WELCOME: Msg = {
@@ -14,7 +17,14 @@ const WELCOME: Msg = {
     "Namaste! I'm your AgentSaathi assistant. Ask me about your clients, policies, draft emails, or general insurance and finance questions in India.",
 };
 
+// Heuristic: does the user want to draft/write/compose an email?
+function isEmailIntent(q: string): boolean {
+  return /\b(draft|write|compose|send|prepare)\b.*\b(email|mail|reminder|letter)\b/i.test(q)
+    || /\b(email|mail)\b.*\b(draft|reminder|to)\b/i.test(q);
+}
+
 export function Assistant() {
+  const router = useRouter();
   const [messages, setMessages] = useState<Msg[]>([WELCOME]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,6 +36,24 @@ export function Assistant() {
     setInput("");
   }
 
+  function scrollToBottom() {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    });
+  }
+
+  function openInComposer(email: NonNullable<Msg["email"]>) {
+    try {
+      sessionStorage.setItem("agentsaathi_email_prefill", JSON.stringify(email));
+    } catch {
+      // ignore storage errors
+    }
+    router.push("/email");
+  }
+
   async function send() {
     const q = input.trim();
     if (!q || loading) return;
@@ -34,40 +62,46 @@ export function Assistant() {
     setInput("");
     setLoading(true);
 
+    const history = messages
+      .slice(1)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
-      const res = await fetch("/api/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          question: q,
-          history: messages.slice(1).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }),
-      });
-      const data = await res.json();
-      
-      // Check for errors or malformed responses
-      let answer = data.answer || "";
-      
-      // If response contains tool call syntax or technical errors, show friendly message
-      if (!answer || answer.includes("web_search") || answer.includes("tool_call") || answer.includes("function") || answer.length < 10) {
-        answer = "I'm having trouble processing that request right now. Please try again in a moment.";
+      if (isEmailIntent(q)) {
+        // Route to the email-drafting model so we can offer a "Compose" action.
+        const res = await fetch("/api/email/ai-draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, history }),
+        });
+        const data = await res.json();
+        setMessages([
+          ...next,
+          {
+            role: "assistant",
+            content:
+              data.answer ||
+              (data.email
+                ? "I've drafted an email for you. Open it in the composer to review and send."
+                : "I can help draft that. Which client and policy is it for?"),
+            email: data.email,
+          },
+        ]);
+      } else {
+        const res = await fetch("/api/assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, history }),
+        });
+        const data = await res.json();
+        setMessages([
+          ...next,
+          {
+            role: "assistant",
+            content: data.answer || "Sorry, I couldn't generate a response. Please try again.",
+          },
+        ]);
       }
-      
-      // Check for other error patterns
-      if (answer.toLowerCase().includes("error") || answer.toLowerCase().includes("failed")) {
-        answer = "I'm experiencing some technical difficulties. Please try again shortly.";
-      }
-      
-      setMessages([
-        ...next,
-        {
-          role: "assistant",
-          content: answer,
-        },
-      ]);
     } catch {
       setMessages([
         ...next,
@@ -75,12 +109,7 @@ export function Assistant() {
       ]);
     } finally {
       setLoading(false);
-      requestAnimationFrame(() => {
-        scrollRef.current?.scrollTo({
-          top: scrollRef.current.scrollHeight,
-          behavior: "smooth",
-        });
-      });
+      scrollToBottom();
     }
   }
 
@@ -101,14 +130,24 @@ export function Assistant() {
             key={i}
             className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
           >
-            <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "bg-foreground text-background"
-                  : "bg-black/[.04] text-foreground"
-              }`}
-            >
-              {m.content}
+            <div className={`max-w-[85%] flex flex-col gap-2 ${m.role === "user" ? "items-end" : "items-start"}`}>
+              <div
+                className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                  m.role === "user"
+                    ? "bg-foreground text-background"
+                    : "bg-black/[.04] text-foreground"
+                }`}
+              >
+                {m.content}
+              </div>
+              {m.email && (
+                <button
+                  onClick={() => openInComposer(m.email!)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg bg-foreground text-background hover:opacity-90 transition"
+                >
+                  <Mail size={13} /> Open in Compose Email
+                </button>
+              )}
             </div>
           </div>
         ))}
