@@ -67,6 +67,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // The AI/agent body sometimes already ends with a sign-off. The template
+    // below adds the ONLY sign-off, so strip any trailing "Best regards/Regards/
+    // Thanks/Sincerely ..." block (and a trailing name line) to avoid duplicates.
+    const cleanBody = body
+      .trim()
+      .replace(
+        /\n*\s*(best\s+regards|warm\s+regards|kind\s+regards|regards|sincerely|thanks(\s+and\s+regards)?|yours\s+(truly|faithfully|sincerely))\s*,?\s*(\n.*)*$/i,
+        ""
+      )
+      .trim();
+
     // Build professional HTML email
     const html = `<!doctype html>
 <html>
@@ -82,7 +93,7 @@ export async function POST(request: NextRequest) {
           <span style="color:#ffffff;font-size:20px;font-weight:600;letter-spacing:0.5px;">AgentSaathi</span>
         </td></tr>
         <tr><td style="padding:40px;">
-          <div style="font-size:15px;line-height:26px;color:#333333;white-space:pre-wrap;">${body
+          <div style="font-size:15px;line-height:26px;color:#333333;white-space:pre-wrap;">${cleanBody
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
@@ -105,7 +116,7 @@ export async function POST(request: NextRequest) {
       from: `"${fromName}" <${fromEmail}>`,
       to: to.trim(),
       subject: subject.trim(),
-      text: body.trim(),
+      text: `${cleanBody}\n\nBest regards,\n${fromName}`,
       html,
       attachments: attachments.length > 0 ? attachments : undefined,
       replyTo: fromEmail,

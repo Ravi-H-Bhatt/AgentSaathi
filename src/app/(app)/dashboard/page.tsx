@@ -1,6 +1,6 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
-import { ownerIdFor } from "@/lib/team";
+import { ownerIdFor, isColleague } from "@/lib/team";
 import { money, isThisMonth } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
@@ -11,6 +11,9 @@ import type { Client, Policy } from "@/lib/types";
 export default async function DashboardPage() {
   const agent = (await getCurrentAgent())!;
   const ownerId = ownerIdFor(agent);
+  // Colleagues can look up individual clients/policies, but must NOT see
+  // aggregate financials (total sum insured, premium analytics).
+  const colleague = isColleague(agent);
   const [clients, policies] = await Promise.all([
     getClients(ownerId),
     getPolicies(ownerId),
@@ -34,7 +37,7 @@ export default async function DashboardPage() {
           Welcome back. Here&apos;s what needs your attention.
         </p>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className={`grid gap-4 sm:grid-cols-2 ${colleague ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
         <Reveal>
           <StatCard label="Total clients" value={clients.length.toString()} />
         </Reveal>
@@ -48,21 +51,25 @@ export default async function DashboardPage() {
             highlight
           />
         </Reveal>
-        <Reveal delay={0.15}>
-          <StatCard label="Total sum insured" value={money(totalSI)} />
-        </Reveal>
+        {!colleague && (
+          <Reveal delay={0.15}>
+            <StatCard label="Total sum insured" value={money(totalSI)} />
+          </Reveal>
+        )}
       </div>
 
-      <Reveal delay={0.08}>
-        <PremiumAnalytics
-          policies={policies.map((p) => ({
-            premium: p.premium,
-            sum_insured: p.sum_insured,
-            renewal_date: p.renewal_date,
-            mode: p.mode,
-          }))}
-        />
-      </Reveal>
+      {!colleague && (
+        <Reveal delay={0.08}>
+          <PremiumAnalytics
+            policies={policies.map((p) => ({
+              premium: p.premium,
+              sum_insured: p.sum_insured,
+              renewal_date: p.renewal_date,
+              mode: p.mode,
+            }))}
+          />
+        </Reveal>
+      )}
 
       <Reveal delay={0.1}>
         <section className="rounded-2xl border border-border bg-card overflow-hidden">
