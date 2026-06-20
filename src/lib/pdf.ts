@@ -1,26 +1,25 @@
 import "server-only";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 /**
  * Extract the text layer from a PDF buffer using pdfjs-dist directly.
  *
- * Vercel/serverless fix: We use pdfjs-dist directly (not via pdf-parse) and
- * disable the worker. In Node.js/serverless, pdfjs runs perfectly fine in-thread
- * without a worker. This avoids all worker-path bundling issues.
+ * Vercel/serverless fix: Point to the actual worker file in node_modules.
  */
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   try {
     // Import pdfjs-dist
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     
-    // Disable worker - use the built-in worker file path but disable worker fetch
-    pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+    // Point to the worker file in node_modules
+    // In serverless, this will be bundled correctly by Vercel
+    const workerPath = "pdfjs-dist/legacy/build/pdf.worker.mjs";
+    pdfjs.GlobalWorkerOptions.workerSrc = workerPath;
 
-    // Load the PDF document with options that work in serverless
+    // Load the PDF document
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(buffer),
-      useWorkerFetch: false,
-      isEvalSupported: false,
-      useSystemFonts: true,
     });
     
     const pdf = await loadingTask.promise;
