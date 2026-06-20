@@ -241,9 +241,9 @@ export default function EmailPage() {
   }
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-5 min-h-0">
+    <div className="lg:h-[calc(100vh-8rem)] flex flex-col lg:flex-row gap-5 min-h-0">
       {/* LEFT: Email Form */}
-      <div className="w-1/2 flex flex-col bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
+      <div className="w-full lg:w-1/2 flex flex-col bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between shrink-0">
           <h2 className="text-base font-semibold flex items-center gap-2">
             <Mail size={18} /> Compose Email
@@ -398,7 +398,7 @@ export default function EmailPage() {
       </div>
 
       {/* RIGHT: AI Assistant */}
-      <div className="w-1/2 flex flex-col bg-white border border-border rounded-2xl shadow-sm overflow-hidden">
+      <div className="w-full lg:w-1/2 flex flex-col bg-white border border-border rounded-2xl shadow-sm overflow-hidden min-h-[60vh] lg:min-h-0">
         <div className="px-6 py-4 border-b border-border flex items-center gap-3 shrink-0">
           <div className="h-10 w-10 rounded-full bg-foreground flex items-center justify-center">
             <Bot size={20} className="text-background" />
@@ -413,7 +413,7 @@ export default function EmailPage() {
           {aiMessages.length === 0 ? (
             <div className="h-full flex flex-col">
               <div className="flex-1" />
-              <div className="grid grid-cols-2 gap-3 mb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                 {SUGGESTIONS.map((s, i) => (
                   <button
                     key={i}
