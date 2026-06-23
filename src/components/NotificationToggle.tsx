@@ -15,12 +15,10 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-type State = "unsupported" | "off" | "on" | "loading";
+type State = "unsupported" | "off" | "on" | "loading" | "enabling";
 
 /**
- * Sidebar toggle to enable/disable PWA push notifications. Handles the
- * permission prompt, subscribes via the service worker, and stores the
- * subscription on the server.
+ * Auto-enable notifications on first load. Users can disable if they want.
  */
 export function NotificationToggle() {
   const [state, setState] = useState<State>("loading");
@@ -41,9 +39,41 @@ export function NotificationToggle() {
       try {
         const reg = await navigator.serviceWorker.ready;
         const sub = await reg.pushManager.getSubscription();
-        if (!cancelled) setState(sub ? "on" : "off");
-      } catch {
-        if (!cancelled) setState("off");
+        
+        if (sub) {
+          // Already subscribed
+          if (!cancelled) setState("on");
+        } else {
+          // Not subscribed yet - auto-enable
+          if (!cancelled) setState("enabling");
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            if (!cancelled) {
+              setState("off");
+              setError("Notifications blocked. Enable in browser settings.");
+            }
+            return;
+          }
+          
+          const newSub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+          
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newSub.toJSON()),
+          });
+          
+          if (!res.ok) throw new Error("Failed to save subscription");
+          if (!cancelled) setState("on");
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setState("off");
+          setError(e instanceof Error ? e.message : "Setup failed");
+        }
       }
     })();
     return () => {
