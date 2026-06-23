@@ -107,11 +107,13 @@ export default async function ActivityLogsPage() {
                       }`}
                     >
                       <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                        {timestamp.toLocaleDateString("en-IN", {
+                        {timestamp.toLocaleString("en-IN", {
                           month: "short",
                           day: "numeric",
+                          year: "numeric",
                           hour: "2-digit",
                           minute: "2-digit",
+                          hour12: true,
                         })}
                       </td>
                       <td className="px-4 py-3">
