@@ -145,6 +145,7 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
             rows={1}
             placeholder="Message your team…"
             className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 max-h-28"
+            style={{ minHeight: '40px' }}
           />
           <button
             onClick={send}

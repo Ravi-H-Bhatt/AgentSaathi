@@ -99,10 +99,40 @@ export function UploadFlow() {
         return;
       }
 
+      // Single policy - auto-import immediately
       setForm(data.extracted);
       setLowConf(data.extracted?.low_confidence_fields || []);
       if (data.message) setInfo(data.message);
-      setStep("review");
+      
+      // Auto-save without showing review step
+      if (data.extracted?.client_name?.trim()) {
+        setStep("saving");
+        try {
+          const saveRes = await fetch("/api/policies", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              ...data.extracted, 
+              source_file_path: data.filePath 
+            }),
+          });
+          const saveData = await saveRes.json();
+          if (!saveRes.ok) throw new Error(saveData.error || "Save failed");
+          
+          setStep("done");
+          if (saveData.duplicate) {
+            setInfo("This policy already exists.");
+          } else {
+            setInfo("Policy saved successfully!");
+          }
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Save failed");
+          setStep("review"); // Fall back to review on error
+        }
+      } else {
+        // No client name - show review
+        setStep("review");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
       setStep("idle");
@@ -158,10 +188,9 @@ export function UploadFlow() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Save failed");
-      if (data.duplicate) setInfo("This policy already exists — opening it.");
+      if (data.duplicate) setInfo("This policy already exists.");
+      else setInfo("Policy saved successfully!");
       setStep("done");
-      // Navigate immediately without waiting for router.refresh
-      router.push(`/clients/${data.clientId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
     } finally {
@@ -198,33 +227,55 @@ export function UploadFlow() {
   // ---- DONE ----
   if (step === "done") {
     return (
-      <div className="rounded-2xl border border-border bg-card p-10 text-center">
-        <CheckCircle2 className="mx-auto text-green-600" size={40} />
-        {bulkResult ? (
-          <>
-            <p className="mt-3 font-medium">
-              Imported {bulkResult.created.toLocaleString("en-IN")} policies
-            </p>
-            <p className="text-sm text-muted mt-1">
-              {bulkResult.clientsCreated.toLocaleString("en-IN")} new clients
-              {bulkResult.duplicates > 0 &&
-                ` · ${bulkResult.duplicates.toLocaleString("en-IN")} duplicates skipped`}
-              {bulkResult.skippedNoName > 0 &&
-                ` · ${bulkResult.skippedNoName} rows skipped (no name)`}
-            </p>
-            <button
-              onClick={() => router.push("/clients")}
-              className="mt-5 px-5 py-2.5 rounded-full bg-foreground text-background font-medium hover:opacity-90 transition"
-            >
-              View clients
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="mt-3 font-medium">Policy saved</p>
-            <p className="text-sm text-muted">Taking you to the client…</p>
-          </>
-        )}
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-border bg-card p-10 text-center">
+          <CheckCircle2 className="mx-auto text-green-600" size={40} />
+          {bulkResult ? (
+            <>
+              <p className="mt-3 font-medium">
+                Imported {bulkResult.created.toLocaleString("en-IN")} policies
+              </p>
+              <p className="text-sm text-muted mt-1">
+                {bulkResult.clientsCreated.toLocaleString("en-IN")} new clients
+                {bulkResult.duplicates > 0 &&
+                  ` · ${bulkResult.duplicates.toLocaleString("en-IN")} duplicates skipped`}
+                {bulkResult.skippedNoName > 0 &&
+                  ` · ${bulkResult.skippedNoName} rows skipped (no name)`}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-3 font-medium">Policy saved successfully!</p>
+              {info && <p className="text-sm text-muted mt-1">{info}</p>}
+            </>
+          )}
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setStep("idle");
+              setForm(null);
+              setRows([]);
+              setBulkResult(null);
+              setError(null);
+              setInfo(null);
+              setFileName("");
+              setFilePath(null);
+              setCategory(null);
+              if (singleInputRef.current) singleInputRef.current.value = "";
+              if (bundleInputRef.current) bundleInputRef.current.value = "";
+            }}
+            className="px-5 py-2.5 rounded-full bg-foreground text-background font-medium hover:opacity-90 transition"
+          >
+            Upload more
+          </button>
+          <button
+            onClick={() => router.push("/clients")}
+            className="px-5 py-2.5 rounded-full border border-border font-medium hover:bg-black/[.03] transition"
+          >
+            View clients
+          </button>
+        </div>
       </div>
     );
   }
