@@ -16,18 +16,32 @@ const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
  * and to list low-confidence fields so the agent can review them.
  */
 export async function extractPolicyFromText(
-  text: string
+  text: string,
+  categoryHint?: "LIFE" | "GENERAL" | null
 ): Promise<ExtractedPolicy> {
   const trimmed = text.slice(0, 16000); // keep within token budget
 
   const system = [
-    "You extract structured insurance-policy data from raw document text.",
+    "You extract structured insurance-policy data from raw Indian insurance document text.",
     "Return ONLY valid JSON matching the requested schema.",
     "Rules:",
     "- If a value is not clearly present, use null. NEVER invent or guess values.",
-    "- Dates must be ISO format YYYY-MM-DD. If only a year/month is present, do your best; otherwise null.",
+    "- Dates must be ISO format YYYY-MM-DD. Indian documents use DD/MM/YYYY or DD-MON-YYYY — convert carefully (e.g. 20/04/2026 -> 2026-04-20).",
     "- sum_insured and premium must be plain numbers (no currency symbols, commas, or text).",
     "- age must be an integer if present, else null.",
+    "- client_name = the main policyholder / proposer name (NOT the nominee, agent, or company).",
+    "- company = the INSURER company name (e.g. 'The New India Assurance Co. Ltd.', 'LIC of India', 'HDFC Life'). Not the agent or office.",
+    "- policy_type = the plan/product name (e.g. 'New India Floater Mediclaim', 'Jeevan Anand', 'Term Plan'). For health/mediclaim use the plan name.",
+    "- policy_number = the CURRENT policy number (prefer 'Current Policy No' over 'Previous Policy No').",
+    "- sum_insured: for floater/health use the Floater Sum Insured or Sum Insured. For life use the Sum Assured.",
+    "- premium: use the TOTAL net premium actually paid (e.g. 'Net Premium (With GST)' or 'Total Gross Premium'), not a single member's basic premium.",
+    "- start_date = policy period FROM / date of commencement. renewal_date = policy period TO / next renewal / due date.",
+    "- date_of_birth: the main policyholder's DOB if shown in an insured-persons table (the SELF row), else null.",
+    categoryHint === "LIFE"
+      ? "- This is a LIFE INSURANCE (LIC/life) document. Expect Sum Assured, D.O.C., maturity, and a single life assured."
+      : categoryHint === "GENERAL"
+      ? "- This is a GENERAL INSURANCE (health/motor/mediclaim) document. Expect Sum Insured, policy period, and possibly multiple insured members."
+      : "- The category is unknown; infer life vs general from the content.",
     "- list any field you are unsure about in low_confidence_fields.",
   ].join("\n");
 

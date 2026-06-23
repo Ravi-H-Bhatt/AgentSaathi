@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendRenewalEmail } from "@/lib/email";
+import { sendPushToAgent } from "@/lib/push";
 import type { Agent, Client, Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -84,6 +85,23 @@ export async function GET(request: NextRequest) {
         subject: `Renewal reminder: ${policy.policy_type || "policy"}`,
         status: "sent",
       });
+      // Notify the owner AND all colleagues that a renewal is coming up.
+      const { data: team } = await db
+        .from("agents")
+        .select("id")
+        .eq("status", "approved")
+        .or(`id.eq.${policy.agent_id},parent_agent_id.eq.${policy.agent_id}`);
+      
+      for (const t of (team as { id: string }[]) || []) {
+        await sendPushToAgent(t.id, {
+          title: "Renewal coming up",
+          body: `${(client as Client).full_name}'s ${
+            policy.policy_type || "policy"
+          } renews on ${policy.renewal_date}.`,
+          url: `/clients/${policy.client_id}`,
+          tag: `renewal-${policy.id}`,
+        });
+      }
       sent++;
     } catch (e) {
       errors.push(policy.id + ": " + (e instanceof Error ? e.message : "error"));

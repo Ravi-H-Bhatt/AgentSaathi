@@ -10,6 +10,9 @@ export function GoogleSignIn({ next }: { next?: string } = {}) {
   async function signIn() {
     setLoading(true);
     setError(null);
+    
+    console.log("Sign in button clicked"); // Debug log
+    
     if (
       !process.env.NEXT_PUBLIC_SUPABASE_URL ||
       !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -20,17 +23,31 @@ export function GoogleSignIn({ next }: { next?: string } = {}) {
       setLoading(false);
       return;
     }
-    const supabase = createClient();
-    const callback = new URL(`${window.location.origin}/auth/callback`);
-    if (next) callback.searchParams.set("next", next);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: callback.toString(),
-      },
-    });
-    if (error) {
-      setError(error.message);
+    
+    try {
+      const supabase = createClient();
+      const callback = new URL(`${window.location.origin}/auth/callback`);
+      if (next) callback.searchParams.set("next", next);
+      
+      console.log("Attempting OAuth with callback:", callback.toString()); // Debug log
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: callback.toString(),
+        },
+      });
+      
+      console.log("OAuth response:", { data, error }); // Debug log
+      
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+      }
+      // If successful, browser will redirect - don't set loading false
+    } catch (err) {
+      console.error("Sign in error:", err); // Debug log
+      setError(err instanceof Error ? err.message : "An error occurred");
       setLoading(false);
     }
   }

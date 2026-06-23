@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAgent } from "@/lib/auth";
 import { getAllClientsWithPolicies } from "@/lib/data";
-import { ownerIdFor, permissionsFor } from "@/lib/team";
+import { ownerIdFor, permissionsFor, isColleague } from "@/lib/team";
 import { ClientsList } from "@/components/ClientsList";
 import { DownloadAllButton } from "@/components/DownloadAllButton";
+import { DeleteAllClientsButton } from "@/components/DeleteAllClientsButton";
 
 export default async function ClientsPage() {
   const agent = (await getCurrentAgent())!;
@@ -34,6 +35,9 @@ export default async function ClientsPage() {
             clients={clientsWithPolicies}
             agentName={agent.full_name || agent.email}
           />
+          {!isColleague(agent) && clientsWithPolicies.length > 0 && (
+            <DeleteAllClientsButton />
+          )}
           <Link
             href="/upload"
             className="text-sm font-medium px-4 py-2 rounded-full bg-foreground text-background hover:opacity-90 transition"

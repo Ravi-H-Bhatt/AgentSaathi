@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, logActivity } from "@/lib/team";
+import { sendPushToAgent } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -62,5 +63,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   await logActivity(agent, "team_chat", content.trim().slice(0, 80));
+  
+  // Notify all team members (owner + colleagues) EXCEPT the sender.
+  const { data: team } = await db
+    .from("agents")
+    .select("id")
+    .eq("status", "approved")
+    .or(`id.eq.${ownerId},parent_agent_id.eq.${ownerId}`);
+  
+  const recipients = (team as { id: string }[])?.filter((a) => a.id !== agent.id) || [];
+  for (const r of recipients) {
+    await sendPushToAgent(r.id, {
+      title: `${agent.full_name || agent.email} sent a message`,
+      body: content.trim().slice(0, 120),
+      url: "/dashboard",
+      tag: "team-chat",
+    });
+  }
+  
   return NextResponse.json({ message: data });
 }

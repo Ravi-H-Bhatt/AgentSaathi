@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Download, Mail, TrendingUp, Phone, AtSign } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2 } from "lucide-react";
 import { money, shortDate } from "@/lib/format";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
@@ -11,17 +12,69 @@ export function ClientDetail({
   client,
   agentName,
   projections,
+  canDelete = false,
 }: {
   client: ClientWithPolicies;
   agentName: string;
   projections: PremiumProjection[];
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
   const [sending, setSending] = useState<string | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(
     null
   );
 
   const projByPolicy = new Map(projections.map((p) => [p.policyId, p]));
+
+  /** Open or download the stored PDF via a short-lived signed URL. */
+  async function openFile(policyId: string, download: boolean) {
+    setOpening(policyId + (download ? "-dl" : "-view"));
+    setNotice(null);
+    try {
+      const res = await fetch(
+        `/api/policies/file?policyId=${policyId}${download ? "&download=1" : ""}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not open document");
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setNotice({
+        type: "err",
+        msg: e instanceof Error ? e.message : "Could not open document.",
+      });
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  async function deleteClient() {
+    if (
+      !confirm(
+        `Delete ${client.full_name} and all their policies? This cannot be undone.`
+      )
+    )
+      return;
+    setDeleting(true);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/clients?id=${client.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      router.push("/clients");
+      router.refresh();
+    } catch (e) {
+      setNotice({
+        type: "err",
+        msg: e instanceof Error ? e.message : "Delete failed.",
+      });
+      setDeleting(false);
+    }
+  }
 
   async function sendReminder(policyId: string) {
     setSending(policyId);
@@ -79,6 +132,20 @@ export function ClientDetail({
           >
             <Download size={16} /> Download report
           </button>
+          {canDelete && (
+            <button
+              onClick={deleteClient}
+              disabled={deleting}
+              className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+            >
+              {deleting ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Trash2 size={16} />
+              )}
+              Delete client
+            </button>
+          )}
         </div>
       </div>
 
@@ -145,16 +212,48 @@ export function ClientDetail({
                         {p.company || "—"} · {p.policy_number || "No number"}
                       </p>
                     </div>
-                    {client.email && (
-                      <button
-                        onClick={() => sendReminder(p.id)}
-                        disabled={sending === p.id}
-                        className="inline-flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full bg-foreground text-background hover:opacity-90 transition disabled:opacity-50"
-                      >
-                        <Mail size={15} />
-                        {sending === p.id ? "Sending…" : "Send reminder"}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {p.source_file_path && (
+                        <>
+                          <button
+                            onClick={() => openFile(p.id, false)}
+                            disabled={opening === p.id + "-view"}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition disabled:opacity-50"
+                            title="View policy document"
+                          >
+                            {opening === p.id + "-view" ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <Eye size={14} />
+                            )}
+                            View
+                          </button>
+                          <button
+                            onClick={() => openFile(p.id, true)}
+                            disabled={opening === p.id + "-dl"}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition disabled:opacity-50"
+                            title="Download policy document"
+                          >
+                            {opening === p.id + "-dl" ? (
+                              <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                              <FileText size={14} />
+                            )}
+                            Download
+                          </button>
+                        </>
+                      )}
+                      {client.email && (
+                        <button
+                          onClick={() => sendReminder(p.id)}
+                          disabled={sending === p.id}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-foreground text-background hover:opacity-90 transition disabled:opacity-50"
+                        >
+                          <Mail size={14} />
+                          {sending === p.id ? "Sending…" : "Remind"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
                     <Field label="Sum insured" value={money(p.sum_insured)} />

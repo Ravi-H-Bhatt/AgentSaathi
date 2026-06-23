@@ -1,8 +1,10 @@
 import { UploadFlow } from "@/components/UploadFlow";
 
-export default function UploadPage() {
+export const dynamic = "force-dynamic";
+
+export default async function UploadPage() {
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Upload policy</h1>
         <p className="text-muted mt-1">

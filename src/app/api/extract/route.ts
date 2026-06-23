@@ -28,6 +28,10 @@ export async function POST(request: NextRequest) {
 
   const form = await request.formData();
   const file = form.get("file");
+  const category = (() => {
+    const c = String(form.get("category") || "").toUpperCase();
+    return c === "LIFE" || c === "GENERAL" ? (c as "LIFE" | "GENERAL") : null;
+  })();
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
@@ -87,12 +91,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const extracted = await extractPolicyFromText(text);
+    const extracted = await extractPolicyFromText(text, category);
     return NextResponse.json({
       filePath: path,
       fileName: file.name,
       scanned: false,
       mode: "single",
+      category,
       extracted,
     });
   } catch {

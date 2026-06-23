@@ -21,6 +21,7 @@ import { Assistant } from "@/components/Assistant";
 import { TeamChat } from "@/components/TeamChat";
 import { ProfileEditor } from "@/components/ProfileEditor";
 import { ReportIssue } from "@/components/ReportIssue";
+import { NotificationToggle } from "@/components/NotificationToggle";
 import { ClockWidget } from "@/components/ClockWidget";
 import type { Permissions } from "@/lib/types";
 
@@ -90,10 +91,10 @@ export function AppShell({
     }
   }, [lastCheckTime, drawerOpen, agentId]);
 
-  // Poll for new messages every 8 seconds
+  // Poll for new messages every 10 seconds (reduced from 8 for better performance)
   useEffect(() => {
     checkUnread();
-    const interval = setInterval(checkUnread, 8000);
+    const interval = setInterval(checkUnread, 10000);
     return () => clearInterval(interval);
   }, [checkUnread]);
 
@@ -177,6 +178,7 @@ export function AppShell({
           currentName={displayName}
           onUpdate={(newName) => setDisplayName(newName)}
         />
+        <NotificationToggle />
         <ReportIssue />
         <form action="/auth/signout" method="post" className="mt-1">
           <button className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted hover:bg-black/[.04] hover:text-foreground transition">

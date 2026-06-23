@@ -213,3 +213,24 @@ create policy "policy files owner delete" on storage.objects
     bucket_id = 'policy-files'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+-- ============================================================
+-- push_subscriptions: Web Push (PWA notification) endpoints.
+-- One row per browser/device an agent enables notifications on.
+-- ============================================================
+create table if not exists public.push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid not null references public.agents (id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+create index if not exists push_subscriptions_agent_idx
+  on public.push_subscriptions (agent_id);
+
+alter table public.push_subscriptions enable row level security;
+drop policy if exists push_subscriptions_owner_all on public.push_subscriptions;
+create policy push_subscriptions_owner_all on public.push_subscriptions
+  for all using (agent_id = auth.uid()) with check (agent_id = auth.uid());

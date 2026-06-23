@@ -1,11 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { UploadCloud, FileText, Loader2, CheckCircle2, Table2 } from "lucide-react";
+import { UploadCloud, FileText, Loader2, CheckCircle2, Table2, Package } from "lucide-react";
 import type { ExtractedPolicy, RegisterRow } from "@/lib/types";
 
-type Step = "idle" | "extracting" | "review" | "bulkReview" | "saving" | "done";
+type Step = "idle" | "extracting" | "review" | "bulkReview" | "saving" | "done" | "bundleUploading" | "bundleDone";
+type Category = "LIFE" | "GENERAL" | null;
 
 const FIELDS: { key: keyof ExtractedPolicy; label: string; type?: string }[] = [
   { key: "client_name", label: "Client name" },
@@ -28,7 +29,8 @@ function fmtNum(n: number | null): string {
 
 export function UploadFlow() {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
+  const singleInputRef = useRef<HTMLInputElement>(null);
+  const bundleInputRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("idle");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function UploadFlow() {
   const [form, setForm] = useState<ExtractedPolicy | null>(null);
   const [lowConf, setLowConf] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [category, setCategory] = useState<Category>(null);
 
   // Bulk register state
   const [rows, setRows] = useState<RegisterRow[]>([]);
@@ -48,14 +51,42 @@ export function UploadFlow() {
     clientsCreated: number;
   } | null>(null);
 
+  // Bundle upload state
+  const [bundleResults, setBundleResults] = useState<{
+    total: number;
+    saved: number;
+    duplicates: number;
+    needsReview: number;
+    errors: number;
+    results: Array<{
+      fileName: string;
+      status: string;
+      clientName?: string | null;
+      policyNumber?: string | null;
+      message?: string;
+    }>;
+  } | null>(null);
+
+  // Cleanup on unmount to prevent stuck states
+  useEffect(() => {
+    return () => {
+      setStep("idle");
+      setSaving(false);
+    };
+  }, []);
+
   async function handleFile(file: File) {
     setError(null);
     setInfo(null);
     setStep("extracting");
     setFileName(file.name);
+    setFilePath(null);
+    setForm(null);
+    setRows([]);
 
     const fd = new FormData();
     fd.append("file", file);
+    if (category) fd.append("category", category);
     try {
       const res = await fetch("/api/extract", { method: "POST", body: fd });
       const data = await res.json();
@@ -74,6 +105,33 @@ export function UploadFlow() {
       setStep("review");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
+      setStep("idle");
+    }
+  }
+
+  async function handleBundle(files: FileList) {
+    setError(null);
+    setInfo(null);
+    setStep("bundleUploading");
+    setBundleResults(null);
+    const fd = new FormData();
+    if (category) fd.append("category", category);
+    for (let i = 0; i < files.length; i++) {
+      if (files[i].type === "application/pdf") fd.append("files", files[i]);
+    }
+    try {
+      const res = await fetch("/api/policies/upload-bundle", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      setBundleResults(data);
+      setStep("bundleDone");
+      // Refresh router after a short delay to prevent UI freeze
+      setTimeout(() => router.refresh(), 100);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Upload failed");
       setStep("idle");
     }
   }
@@ -102,9 +160,11 @@ export function UploadFlow() {
       if (!res.ok) throw new Error(data.error || "Save failed");
       if (data.duplicate) setInfo("This policy already exists — opening it.");
       setStep("done");
-      setTimeout(() => router.push(`/clients/${data.clientId}`), 900);
+      // Navigate immediately without waiting for router.refresh
+      router.push(`/clients/${data.clientId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed");
+    } finally {
       setSaving(false);
     }
   }
@@ -126,10 +186,9 @@ export function UploadFlow() {
         skippedNoName: data.skippedNoName ?? 0,
         clientsCreated: data.clientsCreated ?? 0,
       });
-      // Invalidate the Next.js router cache so dashboard/clients show the new
-      // data immediately (otherwise navigation serves a stale cached payload).
-      router.refresh();
       setStep("done");
+      // Refresh router after a short delay to prevent UI freeze
+      setTimeout(() => router.refresh(), 100);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Import failed");
       setStep("bulkReview");
@@ -166,6 +225,87 @@ export function UploadFlow() {
             <p className="text-sm text-muted">Taking you to the client…</p>
           </>
         )}
+      </div>
+    );
+  }
+
+  // ---- BUNDLE DONE ----
+  if (step === "bundleDone" && bundleResults) {
+    const r = bundleResults;
+    const hasIssues = r.needsReview > 0 || r.errors > 0;
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-border bg-card p-6 text-center">
+          <CheckCircle2 className="mx-auto text-green-600" size={40} />
+          <p className="mt-3 font-medium">
+            Processed {r.total} {r.total === 1 ? "file" : "files"}
+          </p>
+          <p className="text-sm text-muted mt-1">
+            {r.saved} saved · {r.duplicates} duplicates
+            {hasIssues && ` · ${r.needsReview} to review · ${r.errors} errors`}
+          </p>
+        </div>
+        {hasIssues && (
+          <div className="rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card border-b border-border">
+                  <tr className="text-left text-xs text-muted uppercase tracking-wide">
+                    <th className="px-4 py-3 font-semibold">File</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Client</th>
+                    <th className="px-4 py-3 font-semibold">Policy #</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {r.results
+                    .filter((res) => res.status === "needs_review" || res.status === "error")
+                    .map((res, i) => (
+                      <tr key={i} className="hover:bg-black/[.02]">
+                        <td className="px-4 py-3 font-mono text-xs">{res.fileName}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                              res.status === "needs_review"
+                                ? "bg-blue-100 text-blue-700"
+                                : "bg-red-100 text-red-700"
+                            }`}
+                          >
+                            {res.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">{res.clientName || "—"}</td>
+                        <td className="px-4 py-3 font-mono text-xs">{res.policyNumber || "—"}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setStep("idle");
+              setBundleResults(null);
+              setCategory(null);
+              setError(null);
+              setInfo(null);
+              setFileName("");
+              setFilePath(null);
+              if (bundleInputRef.current) bundleInputRef.current.value = "";
+            }}
+            className="px-5 py-2.5 rounded-full bg-foreground text-background font-medium hover:opacity-90 transition"
+          >
+            Upload more
+          </button>
+          <button
+            onClick={() => router.push("/clients")}
+            className="px-5 py-2.5 rounded-full border border-border font-medium hover:bg-black/[.03] transition"
+          >
+            View clients
+          </button>
+        </div>
       </div>
     );
   }
@@ -363,57 +503,151 @@ export function UploadFlow() {
 
   // ---- IDLE / UPLOAD ----
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={step === "extracting"}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragging(false);
-          const file = e.dataTransfer.files?.[0];
-          if (file && file.type === "application/pdf") handleFile(file);
-          else if (file) setError("Only PDF files are supported.");
-        }}
-        className={`w-full rounded-2xl border-2 border-dashed bg-card p-12 text-center transition-all disabled:opacity-60 ${
-          dragging ? "border-foreground bg-foreground/[.04]" : "border-border hover:border-foreground/30"
-        }`}
-      >
-        {step === "extracting" ? (
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="animate-spin text-muted" size={32} />
-            <p className="text-sm text-muted">
-              Reading &amp; extracting {fileName}…
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-14 w-14 rounded-2xl bg-foreground text-background flex items-center justify-center">
-              <UploadCloud size={24} />
-            </div>
-            <div>
-              <p className="font-medium">Click to upload a policy PDF</p>
-              <p className="text-sm text-muted mt-1">
-                Single policy or a full policy register — PDF up to ~10MB
-              </p>
-            </div>
-          </div>
-        )}
-      </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="application/pdf"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = "";
-        }}
-      />
-      {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
+    <div className="space-y-6">
+      {/* Category selector */}
+      <div>
+        <label className="block text-sm font-medium mb-2">Policy category</label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCategory("LIFE")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              category === "LIFE"
+                ? "bg-foreground text-background"
+                : "border border-border hover:bg-black/[.03]"
+            }`}
+          >
+            Life Insurance (LIC)
+          </button>
+          <button
+            onClick={() => setCategory("GENERAL")}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              category === "GENERAL"
+                ? "bg-foreground text-background"
+                : "border border-border hover:bg-black/[.03]"
+            }`}
+          >
+            General Insurance (GIC)
+          </button>
+          <button
+            onClick={() => setCategory(null)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+              category === null
+                ? "bg-foreground text-background"
+                : "border border-border hover:bg-black/[.03]"
+            }`}
+          >
+            Auto-detect
+          </button>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4">
+        {/* Single PDF */}
+        <div className="min-h-[320px]">
+          <h3 className="font-semibold mb-2 flex items-center gap-2">
+            <FileText size={18} /> Upload single policy
+          </h3>
+          <button
+            type="button"
+            onClick={() => singleInputRef.current?.click()}
+            disabled={step === "extracting" || step === "bundleUploading"}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file && file.type === "application/pdf") handleFile(file);
+              else if (file) setError("Only PDF files are supported.");
+            }}
+            className={`w-full rounded-2xl border-2 border-dashed bg-card p-10 text-center transition-all disabled:opacity-60 ${
+              dragging
+                ? "border-foreground bg-foreground/[.04]"
+                : "border-border hover:border-foreground/30"
+            }`}
+          >
+            {step === "extracting" ? (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="animate-spin text-muted" size={32} />
+                <p className="text-sm text-muted">Reading PDF...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-foreground text-background flex items-center justify-center">
+                  <UploadCloud size={22} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Click or drop PDF</p>
+                  <p className="text-xs text-muted mt-1">
+                    One policy schedule or register
+                  </p>
+                </div>
+              </div>
+            )}
+          </button>
+          <input
+            ref={singleInputRef}
+            type="file"
+            accept="application/pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFile(file);
+              e.target.value = "";
+            }}
+          />
+        </div>
+
+        {/* Bundle */}
+        <div className="min-h-[320px]">
+          <h3 className="font-semibold mb-2 flex items-center gap-2">
+            <Package size={18} /> Upload policy bundle
+          </h3>
+          <button
+            type="button"
+            onClick={() => bundleInputRef.current?.click()}
+            disabled={step === "extracting" || step === "bundleUploading"}
+            className="w-full rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center transition-all hover:border-foreground/30 disabled:opacity-60"
+          >
+            {step === "bundleUploading" ? (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="animate-spin text-muted" size={32} />
+                <p className="text-sm text-muted">Processing...</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-12 w-12 rounded-xl bg-foreground text-background flex items-center justify-center">
+                  <Package size={22} />
+                </div>
+                <div>
+                  <p className="font-medium text-sm">Click to select files</p>
+                  <p className="text-xs text-muted mt-1">
+                    Multiple e-policy PDFs at once
+                  </p>
+                </div>
+              </div>
+            )}
+          </button>
+          <input
+            ref={bundleInputRef}
+            type="file"
+            accept="application/pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                handleBundle(e.target.files);
+              }
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
     </div>
   );
 }
