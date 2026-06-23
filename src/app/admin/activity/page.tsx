@@ -107,7 +107,8 @@ export default async function ActivityLogsPage() {
                       }`}
                     >
                       <td className="px-4 py-3 text-xs text-muted whitespace-nowrap">
-                        {timestamp.toLocaleString("en-IN", {
+                        {new Date(log.created_at).toLocaleString("en-IN", {
+                          timeZone: "Asia/Kolkata",
                           month: "short",
                           day: "numeric",
                           year: "numeric",
