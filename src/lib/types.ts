@@ -74,6 +74,8 @@ export interface Policy {
   client_id: string;
   company: string | null;
   policy_type: string | null;
+  product_name: string | null;
+  client_address: string | null;
   policy_number: string | null;
   sum_insured: number | null;
   premium: number | null;
@@ -96,9 +98,12 @@ export interface RegisterRow {
   sn: number | null;
   client_name: string | null;
   client_phone: string | null;
+  client_address: string | null;
   policy_number: string | null;
   /** "Plan" column, e.g. 165/35/35. */
   policy_type: string | null;
+  /** Product name like "New India Mediclaim Policy". */
+  product_name: string | null;
   /** "Mode" column, e.g. Mly/QLY/HLY/YLY/SGL. */
   mode: string | null;
   /** "D.O.C." (date of commencement) -> start_date, ISO. */

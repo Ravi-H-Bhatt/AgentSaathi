@@ -46,7 +46,7 @@ export default async function DashboardPage() {
         </Reveal>
         <Reveal delay={0.1}>
           <StatCard
-            label="Renewals this month"
+            label="Renewals in next 30 days"
             value={renewalsThisMonth.length.toString()}
             highlight
           />
@@ -74,14 +74,14 @@ export default async function DashboardPage() {
       <Reveal delay={0.1}>
         <section className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold">Renewals this month</h2>
+            <h2 className="font-semibold">Renewals in next 30 days</h2>
             <span className="text-sm text-muted">
               {renewalsThisMonth.length} due
             </span>
           </div>
           {renewalsThisMonth.length === 0 ? (
             <p className="px-5 py-10 text-center text-muted text-sm">
-              No renewals this month. You&apos;re all caught up.
+              No renewals in the next 30 days. You&apos;re all caught up.
             </p>
           ) : (
             <RenewalsList

@@ -46,6 +46,8 @@ create table if not exists public.policies (
   client_id uuid not null references public.clients (id) on delete cascade,
   company text,
   policy_type text,
+  product_name text,
+  client_address text,
   policy_number text,
   sum_insured numeric,
   premium numeric,

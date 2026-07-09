@@ -27,7 +27,7 @@ function fmtNum(n: number | null): string {
   return n == null ? "—" : n.toLocaleString("en-IN");
 }
 
-export function UploadFlow() {
+export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) {
   const router = useRouter();
   const singleInputRef = useRef<HTMLInputElement>(null);
   const bundleInputRef = useRef<HTMLInputElement>(null);

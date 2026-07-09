@@ -85,7 +85,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
                           {c.full_name.charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <p className="font-medium truncate">{c.full_name}</p>
+                          <p className="font-semibold truncate">{c.full_name}</p>
                           <p className="text-sm text-muted truncate">
                             {c.policyCount} {c.policyCount === 1 ? "policy" : "policies"}
                             {c.email ? ` · ${c.email}` : c.phone ? ` · ${c.phone}` : ""}

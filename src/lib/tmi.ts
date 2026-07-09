@@ -191,6 +191,8 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     mode: null,
     premium: premium,
     sum_insured: sumInsured,
+    product_name: null,
+    client_address: null,
   };
 }
 

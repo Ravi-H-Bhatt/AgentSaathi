@@ -290,6 +290,8 @@ function parseRecord(tokens: string[], start: number, end: number): { row: Regis
       renewal_date: renewalDate,
       premium,
       sum_insured: sumInsured,
+      product_name: null,
+      client_address: null,
     },
   };
 }

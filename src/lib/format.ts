@@ -18,11 +18,26 @@ export function isThisMonth(d: string | null | undefined): boolean {
   if (!d) return false;
   const date = new Date(d);
   if (isNaN(date.getTime())) return false;
+  
   const now = new Date();
-  return (
-    date.getMonth() === now.getMonth() &&
-    date.getFullYear() === now.getFullYear()
-  );
+  const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  
+  // Show policies that renew within the next 30 days
+  // This handles renewals across years correctly
+  // For example: if today is Sept 15, 2026, and a policy renews on Oct 3, 2025,
+  // we check if Oct 3, 2026 (same date next occurrence) is within 30 days
+  
+  // Create a "next occurrence" date by taking the renewal date and adjusting the year
+  let nextRenewal = new Date(date);
+  
+  // If the renewal date (with current year) has already passed, use next year
+  nextRenewal.setFullYear(now.getFullYear());
+  if (nextRenewal < now) {
+    nextRenewal.setFullYear(now.getFullYear() + 1);
+  }
+  
+  // Check if this next renewal is within 30 days from now
+  return nextRenewal >= now && nextRenewal <= thirtyDaysFromNow;
 }
 
 export function daysUntil(d: string | null | undefined): number | null {
