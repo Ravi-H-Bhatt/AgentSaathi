@@ -66,7 +66,7 @@ export const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(
   ({ children, className = "" }, ref) => (
     <div
       ref={ref}
-      className={`inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 ${className}`}
+      className={`inline-flex h-auto items-center justify-center rounded-2xl bg-black/[.04] p-1 ${className}`}
     >
       {children}
     </div>
@@ -83,10 +83,10 @@ export const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>
       <button
         ref={ref}
         onClick={() => onValueChange(value)}
-        className={`inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+        className={`inline-flex items-center justify-center whitespace-nowrap rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
           isActive
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:bg-black/[.04]"
+            ? "bg-foreground text-background shadow-sm scale-[1.02]"
+            : "text-muted-foreground hover:text-foreground hover:bg-black/[.03]"
         } ${className}`}
       >
         {children}
@@ -103,7 +103,13 @@ export const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(
     if (activeValue !== value) return null;
 
     return (
-      <div ref={ref} className={`mt-2 focus-visible:outline-none ${className}`}>
+      <div 
+        ref={ref} 
+        className={`mt-2 focus-visible:outline-none ${className}`}
+        style={{
+          animation: "fadeIn 0.3s ease-in-out",
+        }}
+      >
         {children}
       </div>
     );

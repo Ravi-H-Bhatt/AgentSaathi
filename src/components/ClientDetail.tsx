@@ -201,7 +201,7 @@ export function ClientDetail({
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
                       <p className="font-semibold">
-                        {p.policy_type || "Policy"}
+                        {p.product_name || p.policy_type || "Policy"}
                         {proj && (
                           <span className="ml-2 inline-block text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
                             premium change soon
@@ -210,6 +210,9 @@ export function ClientDetail({
                       </p>
                       <p className="text-sm text-muted">
                         {p.company || "—"} · {p.policy_number || "No number"}
+                        {p.policy_type && p.product_name && p.product_name !== p.policy_type && (
+                          <span className="ml-2">· {p.policy_type}</span>
+                        )}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

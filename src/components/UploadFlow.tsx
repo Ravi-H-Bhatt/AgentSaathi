@@ -557,34 +557,34 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     <div className="space-y-6">
       {/* Category selector */}
       <div>
-        <label className="block text-sm font-medium mb-2">Policy category</label>
-        <div className="flex gap-2">
+        <label className="block text-sm font-medium mb-3">Policy category</label>
+        <div className="inline-flex gap-1 p-1 rounded-2xl bg-black/[.04]">
           <button
             onClick={() => setCategory("LIFE")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
               category === "LIFE"
-                ? "bg-foreground text-background"
-                : "border border-border hover:bg-black/[.03]"
+                ? "bg-foreground text-background shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-black/[.03]"
             }`}
           >
             Life Insurance (LIC)
           </button>
           <button
             onClick={() => setCategory("GENERAL")}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
               category === "GENERAL"
-                ? "bg-foreground text-background"
-                : "border border-border hover:bg-black/[.03]"
+                ? "bg-foreground text-background shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-black/[.03]"
             }`}
           >
             General Insurance (GIC)
           </button>
           <button
             onClick={() => setCategory(null)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+            className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
               category === null
-                ? "bg-foreground text-background"
-                : "border border-border hover:bg-black/[.03]"
+                ? "bg-foreground text-background shadow-sm scale-[1.02]"
+                : "text-muted-foreground hover:text-foreground hover:bg-black/[.03]"
             }`}
           >
             Auto-detect
@@ -593,10 +593,11 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
-        {/* Single PDF */}
+        {/* Single File */}
         <div className="min-h-[320px]">
           <h3 className="font-semibold mb-2 flex items-center gap-2">
-            <FileText size={18} /> Upload single policy
+            {fileType === "xlsx" ? <Table2 size={18} /> : <FileText size={18} />} 
+            Upload single {fileType === "xlsx" ? "spreadsheet" : "policy"}
           </h3>
           <button
             type="button"
@@ -611,19 +612,22 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
               e.preventDefault();
               setDragging(false);
               const file = e.dataTransfer.files?.[0];
-              if (file && file.type === "application/pdf") handleFile(file);
-              else if (file) setError("Only PDF files are supported.");
+              const acceptedType = fileType === "xlsx" 
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "application/pdf";
+              if (file && file.type === acceptedType) handleFile(file);
+              else if (file) setError(`Only ${fileType.toUpperCase()} files are supported.`);
             }}
             className={`w-full rounded-2xl border-2 border-dashed bg-card p-10 text-center transition-all disabled:opacity-60 ${
               dragging
-                ? "border-foreground bg-foreground/[.04]"
-                : "border-border hover:border-foreground/30"
+                ? "border-foreground bg-foreground/[.04] scale-[1.02]"
+                : "border-border hover:border-foreground/30 hover:bg-black/[.02]"
             }`}
           >
             {step === "extracting" ? (
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="animate-spin text-muted" size={32} />
-                <p className="text-sm text-muted">Reading PDF...</p>
+                <p className="text-sm text-muted">Reading {fileType.toUpperCase()}...</p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3">
@@ -631,9 +635,11 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                   <UploadCloud size={22} />
                 </div>
                 <div>
-                  <p className="font-medium text-sm">Click or drop PDF</p>
+                  <p className="font-medium text-sm">Click or drop {fileType.toUpperCase()}</p>
                   <p className="text-xs text-muted mt-1">
-                    One policy schedule or register
+                    {fileType === "xlsx" 
+                      ? "Excel file with policy data" 
+                      : "One policy schedule or register"}
                   </p>
                 </div>
               </div>
@@ -642,7 +648,9 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
           <input
             ref={singleInputRef}
             type="file"
-            accept="application/pdf"
+            accept={fileType === "xlsx" 
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
+              : "application/pdf"}
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -655,13 +663,13 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
         {/* Bundle */}
         <div className="min-h-[320px]">
           <h3 className="font-semibold mb-2 flex items-center gap-2">
-            <Package size={18} /> Upload policy bundle
+            <Package size={18} /> Upload {fileType === "xlsx" ? "multiple spreadsheets" : "policy bundle"}
           </h3>
           <button
             type="button"
             onClick={() => bundleInputRef.current?.click()}
             disabled={step === "extracting" || step === "bundleUploading"}
-            className="w-full rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center transition-all hover:border-foreground/30 disabled:opacity-60"
+            className="w-full rounded-2xl border-2 border-dashed border-border bg-card p-10 text-center transition-all hover:border-foreground/30 hover:bg-black/[.02] hover:scale-[1.01] disabled:opacity-60"
           >
             {step === "bundleUploading" ? (
               <div className="flex flex-col items-center gap-3">
@@ -676,7 +684,9 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                 <div>
                   <p className="font-medium text-sm">Click to select files</p>
                   <p className="text-xs text-muted mt-1">
-                    Multiple e-policy PDFs at once
+                    {fileType === "xlsx" 
+                      ? "Multiple Excel files at once" 
+                      : "Multiple e-policy PDFs at once"}
                   </p>
                 </div>
               </div>
@@ -685,7 +695,9 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
           <input
             ref={bundleInputRef}
             type="file"
-            accept="application/pdf"
+            accept={fileType === "xlsx" 
+              ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
+              : "application/pdf"}
             multiple
             className="hidden"
             onChange={(e) => {

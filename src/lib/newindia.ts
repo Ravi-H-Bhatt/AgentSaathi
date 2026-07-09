@@ -56,25 +56,30 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
   
   console.log(`[newindia] Processing policy ${policyNumber}`);
   
-  // Extract product code and plan name
-  // Pattern: PolicyNumber: ProductCode ProductName StartDate EndDate ...
+  // Extract product code and product name
+  // Pattern: PolicyNumber: ProductCode ProductName (before first date)
   let rawPlan: string | null = null;
   let productName: string | null = null;
   
-  const planMatch = fullText.match(new RegExp(
-    '\\d{20,25}:\\s*([A-Z]{2})\\s+(.+?)(?=\\s+\\d{2}-[A-Za-z]{3}-\\d{4})',
-    'i'
-  ));
+  // Look for pattern after policy number: ": CODE NAME"
+  const afterPolicy = fullText.slice(fullText.indexOf(policyNumber));
+  const planMatch = afterPolicy.match(/:\s*([A-Z]{2})\s+([A-Za-z\s]+?)(?=\s+\d{2}-[A-Za-z]{3})/i);
   
-  if (planMatch && planMatch[2]) {
+  if (planMatch) {
+    rawPlan = planMatch[1].trim(); // UK, NP, SH, US, BI, TU, PF, PC
     productName = planMatch[2]
       .replace(/\s+/g, ' ')
-      .trim()
-      .replace(/\s+\d+\s*$/, '')
       .trim();
-    
-    // rawPlan is the product code (UK, NP, etc)
-    rawPlan = planMatch[1].trim();
+  }
+  
+  // Also extract LOB description for context
+  const lobMatch = fullText.match(/210600\s+\d{2}\s+([A-Za-z\s-]+?)\s+\d{20,25}/);
+  const lobDescription = lobMatch ? lobMatch[1].replace(/\s+/g, ' ').trim() : null;
+  
+  // Combine LOB + Product Name for full clarity
+  if (productName && lobDescription && !productName.includes(lobDescription)) {
+    // Keep product name as-is, store LOB in policy_type
+    rawPlan = lobDescription;
   }
   
   // Extract dates
@@ -113,36 +118,37 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
   
   if (holderCodeMatch) {
     const codeIndex = fullText.indexOf(holderCodeMatch[1]);
-    const afterCode = fullText.slice(codeIndex + holderCodeMatch[1].length, codeIndex + holderCodeMatch[1].length + 1000);
+    const afterCode = fullText.slice(codeIndex + holderCodeMatch[1].length, codeIndex + holderCodeMatch[1].length + 800);
     
-    // Match ALL CAPS name followed by address markers or numbers
-    const namePattern = /^\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z0-9][A-Z0-9\s&.,-]{2,120}?)(?=\s+(?:\d{2,}(?:\s|\/|,)|WING|ROOM|FLAT|BNO|PLOT|ROAD|STREET|BUILDING|HOUSE|NEAR|OPP|[6-9]\d{9}))/i;
+    // Match name ONLY - stop at first number/address marker
+    // Name is typically 2-6 words, all caps
+    const namePattern = /^\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z][A-Z\s&.]{2,60}?)(?=\s+(?:\d+|[A-Z]\d+|B\d+|F\d+|WING|ROOM|FLAT|BNO|PLOT))/i;
     
     const nameMatch = afterCode.match(namePattern);
     if (nameMatch) {
       clientName = nameMatch[1]
         .replace(/\s+/g, ' ')
-        .replace(/\s[A-Z0-9]$/, '')
         .trim();
       
-      // Extract address - everything after name until pin code
+      // Extract address - everything after name until pin code or 200 chars
       const afterName = afterCode.slice(nameMatch.index! + nameMatch[0].length);
-      const addressPattern = /^\s+(.+?)(?=\s+\d{6}|\s+[6-9]\d{9}|$)/;
+      const addressPattern = /^\s+(.+?)(?=\s+\d{6}|\s+[6-9]\d{9}|\s+1D6\d{6}|$)/;
       const addressMatch = afterName.match(addressPattern);
       if (addressMatch) {
         clientAddress = addressMatch[1]
           .replace(/\s+/g, ' ')
           .trim()
-          .slice(0, 300); // Limit address length
+          .slice(0, 200);
       }
     }
   }
   
-  // Fallback: look for name after policy number
+  // Fallback: look for name after holder code using stricter pattern
   if (!clientName) {
     const afterPolicyIndex = fullText.indexOf(policyNumber) + policyNumber.length;
-    const policyArea = fullText.slice(afterPolicyIndex, afterPolicyIndex + 600);
-    const fallbackPattern = /:\s*([A-Z0-9][A-Z0-9\s&.,-]{2,80}?)(?=\s+(?:\d{2,}|WING|ROOM|FLAT|PLOT|ROAD|[6-9]\d{9}))/i;
+    const policyArea = fullText.slice(afterPolicyIndex, afterPolicyIndex + 500);
+    // Look for capital name followed by address starting with number/letter-number
+    const fallbackPattern = /[HPM][A-Z]?\d{7,8}\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z][A-Z\s&.]{2,60}?)(?=\s+(?:\d+|[A-Z]\d+|B\d+|F\d+))/i;
     const fallbackMatch = policyArea.match(fallbackPattern);
     if (fallbackMatch) {
       clientName = fallbackMatch[1].trim().replace(/\s+/g, ' ');
