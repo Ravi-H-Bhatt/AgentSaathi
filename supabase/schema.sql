@@ -234,3 +234,29 @@ alter table public.push_subscriptions enable row level security;
 drop policy if exists push_subscriptions_owner_all on public.push_subscriptions;
 create policy push_subscriptions_owner_all on public.push_subscriptions
   for all using (agent_id = auth.uid()) with check (agent_id = auth.uid());
+
+-- ============================================================
+-- activity_log: Track user actions for admin monitoring.
+-- ============================================================
+create table if not exists public.activity_log (
+  id uuid primary key default gen_random_uuid(),
+  agent_id uuid not null references public.agents (id) on delete cascade,
+  action text not null,
+  entity_type text,
+  entity_id uuid,
+  metadata jsonb,
+  ip_address text,
+  user_agent text,
+  created_at timestamptz not null default now()
+);
+create index if not exists activity_log_agent_idx on public.activity_log (agent_id, created_at desc);
+create index if not exists activity_log_created_idx on public.activity_log (created_at desc);
+
+alter table public.activity_log enable row level security;
+drop policy if exists activity_log_insert_self on public.activity_log;
+create policy activity_log_insert_self on public.activity_log
+  for insert with check (agent_id = auth.uid());
+
+drop policy if exists activity_log_admin_read on public.activity_log;
+create policy activity_log_admin_read on public.activity_log
+  for select using (public.is_admin());

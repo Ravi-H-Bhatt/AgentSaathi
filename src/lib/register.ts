@@ -1,6 +1,58 @@
 import type { RegisterRow } from "@/lib/types";
+import { looksLikeNewIndiaRegister, parseNewIndiaRegister } from "./newindia";
+import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
 
 /**
+ * AUTO-DETECTING REGISTER PARSER
+ * 
+ * This module automatically detects the type of PDF register and uses the
+ * appropriate parser:
+ * 
+ * 1. New India Assurance Policy Expiry Register (20-25 digit policy numbers)
+ * 2. TMI E-Register (PZ transaction IDs, space-separated format)
+ * 3. LIC Agent Register (9-digit policy numbers, fixed column format)
+ * 
+ * Each parser is optimized for its specific format to achieve maximum accuracy.
+ */
+
+/**
+ * AUTO-DETECT and parse any supported register type.
+ * Returns parsed policies with metadata about which parser was used.
+ */
+export function parseRegisterAuto(text: string): { 
+  rows: RegisterRow[]; 
+  type: 'newindia' | 'tmi' | 'lic' | 'unknown';
+  confidence: number;
+} {
+  // Check New India first (most distinctive: 20-25 digit policy numbers)
+  if (looksLikeNewIndiaRegister(text)) {
+    console.log('[register] Detected: New India Assurance Policy Expiry Register');
+    const rows = parseNewIndiaRegister(text);
+    return { rows, type: 'newindia', confidence: 0.95 };
+  }
+  
+  // Check TMI E-Register (PZ transaction IDs, TMI header)
+  if (looksLikeTMIRegister(text)) {
+    console.log('[register] Detected: TMI E-Register');
+    const rows = parseTMIRegister(text);
+    return { rows, type: 'tmi', confidence: 0.95 };
+  }
+  
+  // Fallback to LIC register parser
+  if (looksLikeRegister(text)) {
+    console.log('[register] Detected: LIC Agent Register');
+    const rows = parseRegister(text);
+    return { rows, type: 'lic', confidence: 0.85 };
+  }
+  
+  console.warn('[register] Unknown register type, attempting LIC parser as fallback');
+  const rows = parseRegister(text);
+  return { rows, type: 'unknown', confidence: 0.5 };
+}
+
+/**
+ * Legacy LIC Agent Register Parser
+ * 
  * Parser for bulk "Policy Register" PDFs (e.g. LIC agent registers) that list
  * many policies in a fixed-column table:
  *

@@ -4,7 +4,7 @@ import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { extractPdfText } from "@/lib/pdf";
 import { extractPolicyFromText, extractBulkPoliciesFromText } from "@/lib/groq";
-import { looksLikeRegister, parseRegister } from "@/lib/register";
+import { parseRegisterAuto } from "@/lib/register";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -73,22 +73,19 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Bulk "Policy Register" path: many policies in one fixed-column table.
-  // Parsed deterministically (no LLM) — fast, free, and accurate for 1000+ rows.
-  if (looksLikeRegister(text)) {
-    const rows = parseRegister(text);
-    if (rows.length > 0) {
-      return NextResponse.json({
-        filePath: path,
-        fileName: file.name,
-        scanned: false,
-        mode: "bulk",
-        rowCount: rows.length,
-        rows,
-      });
-    }
-    // Looked like a register but parsed nothing — this might be a different format
-    // (e.g., New India policy expiry reports). Fall through to multi-policy LLM extraction.
+  // Use auto-detection to parse any supported register type
+  const { rows, type, confidence } = parseRegisterAuto(text);
+  if (rows.length > 0 && confidence >= 0.5) {
+    return NextResponse.json({
+      filePath: path,
+      fileName: file.name,
+      scanned: false,
+      mode: "bulk",
+      rowCount: rows.length,
+      rows,
+      registerType: type,
+      confidence,
+    });
   }
 
   // Check if this looks like a multi-policy document (e.g., insurance company reports)

@@ -506,6 +506,9 @@ export async function draftEmailWithAi(
  * Extract MULTIPLE policies from a bulk document (e.g., New India policy expiry reports,
  * agent registers from non-LIC companies) using LLM-based extraction.
  * Returns an array of RegisterRow-like objects suitable for bulk import.
+ * 
+ * Strategy: For large documents, split into chunks and extract from each chunk,
+ * then deduplicate by policy number.
  */
 export async function extractBulkPoliciesFromText(
   text: string,
@@ -521,62 +524,98 @@ export async function extractBulkPoliciesFromText(
   premium: number | null;
   sum_insured: number | null;
 }>> {
-  // Limit text to avoid token budget issues — 20k chars should fit ~5k tokens
-  const trimmed = text.slice(0, 20000);
-
-  const system = [
-    "You extract structured insurance policy data from bulk policy reports/registers.",
-    "Input: text from a multi-policy document (e.g., New India policy expiry register, agent report).",
-    "Output: JSON array of policies, each with these exact keys:",
-    "  policy_number (string | null): the 9+ digit policy number",
-    "  client_name (string | null): the insured/policyholder name",
-    "  client_phone (string | null): phone/mobile number (10 digits, or null)",
-    "  start_date (string | null): policy inception date in YYYY-MM-DD format",
-    "  renewal_date (string | null): policy expiry/renewal date in YYYY-MM-DD format",
-    "  plan (string | null): product name/type (e.g. 'New India Mediclaim', 'Term Plan')",
-    "  mode (string | null): payment mode (e.g. 'YLY', 'Mly', 'QLY', 'SGL', 'HLY') or null if not shown",
-    "  premium (number | null): annual premium amount (plain number, no symbols)",
-    "  sum_insured (number | null): sum insured/assured (plain number)",
-    "",
-    "RULES:",
-    "- Return ONLY valid JSON array. Each element is one policy.",
-    "- If a field is not present or unclear, use null. DO NOT guess or invent.",
-    "- Dates: convert DD/MM/YYYY or DD-MMM-YYYY to YYYY-MM-DD (e.g. 03-Jan-2025 -> 2025-01-03).",
-    "- client_name: use the insured/proposer name, NOT the agent or developer officer.",
-    "- plan: use the product name shown in the document (e.g. 'UK New India Mediclaim Policy', 'NP New India Floater Mediclaim').",
-    "- Extract ALL policies found in the text (aim for completeness).",
-    categoryHint === "LIFE"
-      ? "- This is LIFE insurance. Expect D.O.C. (date of commencement), maturity, mode, sum assured."
-      : categoryHint === "GENERAL"
-      ? "- This is GENERAL insurance (health/motor/fire). Expect policy period (from/to dates), sum insured, gross premium."
-      : "- Category unknown. Infer from content.",
-  ].join("\n");
-
-  const user = `Extract all policies from this bulk document:\n\n"""${trimmed}"""\n\nReturn JSON array with keys: policy_number, client_name, client_phone, start_date, renewal_date, plan, mode, premium, sum_insured.`;
-
-  const completion = await groqClient().chat.completions.create({
-    model: MODEL,
-    temperature: 0,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  });
-
-  const raw = completion.choices[0]?.message?.content || "{}";
-  let parsed: { policies?: unknown } = {};
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    console.error("[extractBulkPolicies] JSON parse failed:", raw.slice(0, 200));
-    return [];
+  // For documents up to 25k chars, extract in one go
+  // For larger documents, split into overlapping chunks
+  const CHUNK_SIZE = 24000;
+  const OVERLAP = 1000;
+  
+  const chunks: string[] = [];
+  if (text.length <= CHUNK_SIZE) {
+    chunks.push(text);
+  } else {
+    let start = 0;
+    while (start < text.length) {
+      const end = Math.min(start + CHUNK_SIZE, text.length);
+      chunks.push(text.slice(start, end));
+      start = end - OVERLAP; // Overlap to avoid cutting policies in half
+      if (start >= text.length - OVERLAP) break;
+    }
   }
 
-  // Model might wrap in { "policies": [...] } or return raw array
-  const arr = Array.isArray(parsed) ? parsed : Array.isArray(parsed.policies) ? parsed.policies : [];
+  console.log(`[extractBulkPolicies] Processing ${chunks.length} chunk(s) (${text.length} chars total)`);
+
+  const allPolicies: Array<any> = [];
   
-  return arr.map((p: any) => ({
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    console.log(`[extractBulkPolicies] Chunk ${i + 1}/${chunks.length}: ${chunk.length} chars`);
+    
+    const system = [
+      "You extract structured insurance policy data from bulk policy reports/registers.",
+      "Input: text from a multi-policy document (e.g., New India policy expiry register, agent report).",
+      "Output: JSON array of policies, each with these exact keys:",
+      "  policy_number (string | null): the 9+ digit policy number",
+      "  client_name (string | null): the insured/policyholder name",
+      "  client_phone (string | null): phone/mobile number (10 digits, or null)",
+      "  start_date (string | null): policy inception date in YYYY-MM-DD format",
+      "  renewal_date (string | null): policy expiry/renewal date in YYYY-MM-DD format",
+      "  plan (string | null): product name/type (e.g. 'New India Mediclaim', 'Term Plan')",
+      "  mode (string | null): payment mode (e.g. 'YLY', 'Mly', 'QLY', 'SGL', 'HLY') or null if not shown",
+      "  premium (number | null): annual premium amount (plain number, no symbols)",
+      "  sum_insured (number | null): sum insured/assured (plain number)",
+      "",
+      "RULES:",
+      "- Return ONLY valid JSON. Wrap the array in { \"policies\": [...] }",
+      "- If a field is not present or unclear, use null. DO NOT guess or invent.",
+      "- Dates: convert DD/MM/YYYY or DD-MMM-YYYY to YYYY-MM-DD (e.g. 03-Jan-2025 -> 2025-01-03, 04-Jan-2025 -> 2025-01-04).",
+      "- client_name: use the insured/proposer name, NOT the agent or developer officer.",
+      "- plan: use the product name shown in the document.",
+      "- Extract ALL policies found in the text (aim for completeness).",
+      categoryHint === "LIFE"
+        ? "- This is LIFE insurance. Expect D.O.C. (date of commencement), maturity, mode, sum assured."
+        : categoryHint === "GENERAL"
+        ? "- This is GENERAL insurance (health/motor/fire). Expect policy period (from/to dates), sum insured, gross premium."
+        : "- Category unknown. Infer from content.",
+    ].join("\n");
+
+    const user = `Extract all policies from this document chunk:\n\n"""${chunk}"""\n\nReturn JSON with structure: { "policies": [{policy_number, client_name, client_phone, start_date, renewal_date, plan, mode, premium, sum_insured}, ...] }`;
+
+    try {
+      const completion = await groqClient().chat.completions.create({
+        model: MODEL,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+      });
+
+      const raw = completion.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(raw);
+      const arr = Array.isArray(parsed) ? parsed : Array.isArray(parsed.policies) ? parsed.policies : [];
+      
+      console.log(`[extractBulkPolicies] Chunk ${i + 1}: extracted ${arr.length} policies`);
+      allPolicies.push(...arr);
+    } catch (err) {
+      console.error(`[extractBulkPolicies] Chunk ${i + 1} failed:`, err instanceof Error ? err.message : err);
+      // Continue with other chunks
+    }
+  }
+
+  // Deduplicate by policy number (overlapping chunks may have duplicates)
+  const seen = new Set<string>();
+  const unique = allPolicies.filter(p => {
+    const num = p.policy_number;
+    if (!num) return true; // Keep policies without numbers
+    if (seen.has(num)) return false;
+    seen.add(num);
+    return true;
+  });
+
+  console.log(`[extractBulkPolicies] Total: ${allPolicies.length} policies, ${unique.length} unique`);
+
+  return unique.map((p: any) => ({
     policy_number: p.policy_number ?? null,
     client_name: p.client_name ?? null,
     client_phone: p.client_phone ?? null,
