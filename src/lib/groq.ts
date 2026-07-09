@@ -500,3 +500,91 @@ export async function draftEmailWithAi(
       "I couldn't build a draft from that. Tell me the client name (or the kind of email) and I'll write it.",
   };
 }
+
+
+/**
+ * Extract MULTIPLE policies from a bulk document (e.g., New India policy expiry reports,
+ * agent registers from non-LIC companies) using LLM-based extraction.
+ * Returns an array of RegisterRow-like objects suitable for bulk import.
+ */
+export async function extractBulkPoliciesFromText(
+  text: string,
+  categoryHint?: "LIFE" | "GENERAL" | null
+): Promise<Array<{
+  policy_number: string | null;
+  client_name: string | null;
+  client_phone: string | null;
+  start_date: string | null;
+  renewal_date: string | null;
+  plan: string | null;
+  mode: string | null;
+  premium: number | null;
+  sum_insured: number | null;
+}>> {
+  // Limit text to avoid token budget issues — 20k chars should fit ~5k tokens
+  const trimmed = text.slice(0, 20000);
+
+  const system = [
+    "You extract structured insurance policy data from bulk policy reports/registers.",
+    "Input: text from a multi-policy document (e.g., New India policy expiry register, agent report).",
+    "Output: JSON array of policies, each with these exact keys:",
+    "  policy_number (string | null): the 9+ digit policy number",
+    "  client_name (string | null): the insured/policyholder name",
+    "  client_phone (string | null): phone/mobile number (10 digits, or null)",
+    "  start_date (string | null): policy inception date in YYYY-MM-DD format",
+    "  renewal_date (string | null): policy expiry/renewal date in YYYY-MM-DD format",
+    "  plan (string | null): product name/type (e.g. 'New India Mediclaim', 'Term Plan')",
+    "  mode (string | null): payment mode (e.g. 'YLY', 'Mly', 'QLY', 'SGL', 'HLY') or null if not shown",
+    "  premium (number | null): annual premium amount (plain number, no symbols)",
+    "  sum_insured (number | null): sum insured/assured (plain number)",
+    "",
+    "RULES:",
+    "- Return ONLY valid JSON array. Each element is one policy.",
+    "- If a field is not present or unclear, use null. DO NOT guess or invent.",
+    "- Dates: convert DD/MM/YYYY or DD-MMM-YYYY to YYYY-MM-DD (e.g. 03-Jan-2025 -> 2025-01-03).",
+    "- client_name: use the insured/proposer name, NOT the agent or developer officer.",
+    "- plan: use the product name shown in the document (e.g. 'UK New India Mediclaim Policy', 'NP New India Floater Mediclaim').",
+    "- Extract ALL policies found in the text (aim for completeness).",
+    categoryHint === "LIFE"
+      ? "- This is LIFE insurance. Expect D.O.C. (date of commencement), maturity, mode, sum assured."
+      : categoryHint === "GENERAL"
+      ? "- This is GENERAL insurance (health/motor/fire). Expect policy period (from/to dates), sum insured, gross premium."
+      : "- Category unknown. Infer from content.",
+  ].join("\n");
+
+  const user = `Extract all policies from this bulk document:\n\n"""${trimmed}"""\n\nReturn JSON array with keys: policy_number, client_name, client_phone, start_date, renewal_date, plan, mode, premium, sum_insured.`;
+
+  const completion = await groqClient().chat.completions.create({
+    model: MODEL,
+    temperature: 0,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  });
+
+  const raw = completion.choices[0]?.message?.content || "{}";
+  let parsed: { policies?: unknown } = {};
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.error("[extractBulkPolicies] JSON parse failed:", raw.slice(0, 200));
+    return [];
+  }
+
+  // Model might wrap in { "policies": [...] } or return raw array
+  const arr = Array.isArray(parsed) ? parsed : Array.isArray(parsed.policies) ? parsed.policies : [];
+  
+  return arr.map((p: any) => ({
+    policy_number: p.policy_number ?? null,
+    client_name: p.client_name ?? null,
+    client_phone: p.client_phone ?? null,
+    start_date: p.start_date ?? null,
+    renewal_date: p.renewal_date ?? null,
+    plan: p.plan ?? null,
+    mode: p.mode ?? null,
+    premium: typeof p.premium === "number" ? p.premium : null,
+    sum_insured: typeof p.sum_insured === "number" ? p.sum_insured : null,
+  }));
+}

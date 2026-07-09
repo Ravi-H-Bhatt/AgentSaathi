@@ -3,7 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { extractPdfText } from "@/lib/pdf";
-import { extractPolicyFromText } from "@/lib/groq";
+import { extractPolicyFromText, extractBulkPoliciesFromText } from "@/lib/groq";
 import { looksLikeRegister, parseRegister } from "@/lib/register";
 
 export const runtime = "nodejs";
@@ -87,7 +87,30 @@ export async function POST(request: NextRequest) {
         rows,
       });
     }
-    // Looked like a register but parsed nothing — fall through to single-policy.
+    // Looked like a register but parsed nothing — this might be a different format
+    // (e.g., New India policy expiry reports). Fall through to multi-policy LLM extraction.
+  }
+
+  // Check if this looks like a multi-policy document (e.g., insurance company reports)
+  const policyCount = (text.match(/\b\d{9,}\b/g) || []).length;
+  if (policyCount >= 10) {
+    // Many policies detected — use LLM to extract in bulk
+    try {
+      const bulkExtracted = await extractBulkPoliciesFromText(text, category);
+      if (bulkExtracted && bulkExtracted.length > 0) {
+        return NextResponse.json({
+          filePath: path,
+          fileName: file.name,
+          scanned: false,
+          mode: "bulk",
+          rowCount: bulkExtracted.length,
+          rows: bulkExtracted,
+        });
+      }
+    } catch (err) {
+      console.error("[extract] Bulk LLM extraction failed:", err);
+      // Fall through to single-policy extraction
+    }
   }
 
   try {
