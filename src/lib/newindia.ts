@@ -113,21 +113,24 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
   let clientName: string | null = null;
   let clientAddress: string | null = null;
   
-  // Find holder code: H/PO/ME prefix + 7-8 digits
-  const holderCodeMatch = fullText.match(/\s([HPM][A-Z]?\d{7,8})\s+/);
+  // Find holder code: H/PO/ME/N prefix + 7-8 digits
+  const holderCodeMatch = fullText.match(/\s([HPOMN][A-Z]?\d{7,8})\s+/);
   
   if (holderCodeMatch) {
     const codeIndex = fullText.indexOf(holderCodeMatch[1]);
     const afterCode = fullText.slice(codeIndex + holderCodeMatch[1].length, codeIndex + holderCodeMatch[1].length + 800);
     
-    // Match name ONLY - stop at first number/address marker
-    // Name is typically 2-6 words, all caps
-    const namePattern = /^\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z][A-Z\s&.]{2,60}?)(?=\s+(?:\d+|[A-Z]\d+|B\d+|F\d+|WING|ROOM|FLAT|BNO|PLOT))/i;
+    // Match name ONLY - stop at first address marker (number, letter+number)
+    // Handle corporate names (multiple words) and individual names
+    const namePattern = /^\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z][A-Z\s&.]{2,80}?)(?=\s+(?:\d+|[A-Z]\s*\d+|WING|ROOM|FLAT|BNO|PLOT|GROUND|BASMENT|UNDERGROUND))/i;
     
     const nameMatch = afterCode.match(namePattern);
     if (nameMatch) {
       clientName = nameMatch[1]
         .replace(/\s+/g, ' ')
+        .trim()
+        // Remove trailing single letters that are address markers
+        .replace(/\s+[A-Z]$/,'')
         .trim();
       
       // Extract address - everything after name until pin code or 200 chars
@@ -148,10 +151,14 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     const afterPolicyIndex = fullText.indexOf(policyNumber) + policyNumber.length;
     const policyArea = fullText.slice(afterPolicyIndex, afterPolicyIndex + 500);
     // Look for capital name followed by address starting with number/letter-number
-    const fallbackPattern = /[HPM][A-Z]?\d{7,8}\s+(?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI\s+)?([A-Z][A-Z\s&.]{2,60}?)(?=\s+(?:\d+|[A-Z]\d+|B\d+|F\d+))/i;
+    const fallbackPattern = /[HPOMN][A-Z]?\d{7,8}\s+([A-Z][A-Z\s&.\/]{2,80}?)(?=\s+(?:PROP|A\s+\d+|B\s+\d+|\d+))/i;
     const fallbackMatch = policyArea.match(fallbackPattern);
     if (fallbackMatch) {
-      clientName = fallbackMatch[1].trim().replace(/\s+/g, ' ');
+      clientName = fallbackMatch[1]
+        .trim()
+        .replace(/\s+/g, ' ')
+        .replace(/\s+[A-Z]$/,'')
+        .trim();
     }
   }
   
