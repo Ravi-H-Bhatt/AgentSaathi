@@ -45,7 +45,7 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       if (isNaN(d.getTime())) continue;
 
       // Analytics chart = ONLY renewals due in the CURRENT year, bucketed by
-      // month. A renewal in May 2012 must not count toward May 2026.
+      // month. Parsers ensure all renewal dates are adjusted to current/future year.
       if (d.getFullYear() !== year) continue;
 
       const m = d.getMonth();

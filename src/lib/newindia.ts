@@ -124,6 +124,12 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     }
   }
   
+  // CRITICAL FIX: Adjust renewal dates to current/future year
+  // If renewal_date is in the past, move it forward to same day/month in current or next year
+  if (renewalDate) {
+    renewalDate = adjustRenewalToFuture(renewalDate);
+  }
+  
   // Extract insured name - robust extraction
   let clientName: string | null = null;
   
@@ -301,6 +307,34 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     premium: premium,
     sum_insured: sumInsured,
   };
+}
+
+/**
+ * Adjust a renewal date to current or next year if it's in the past.
+ * Keeps the same day and month, but updates the year to ensure it's upcoming.
+ */
+function adjustRenewalToFuture(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (isNaN(date.getTime())) return isoDate;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const renewalYear = date.getFullYear();
+  
+  // If renewal is in a past year, move it to current or next year
+  if (renewalYear < currentYear) {
+    // Set to current year first
+    date.setFullYear(currentYear);
+    
+    // If that date has already passed this year, move to next year
+    if (date < now) {
+      date.setFullYear(currentYear + 1);
+    }
+    
+    return date.toISOString().split('T')[0];
+  }
+  
+  return isoDate;
 }
 
 function toIsoDate(ddmmmyyyy: string): string | null {

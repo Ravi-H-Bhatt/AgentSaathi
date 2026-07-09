@@ -81,7 +81,12 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
   
   // Dates: first is application date, then From Date (start), To Date (renewal)
   const startDate = dates.length >= 2 ? toIsoDate(dates[1]) : null;
-  const renewalDate = dates.length >= 3 ? toIsoDate(dates[2]) : null;
+  let renewalDate = dates.length >= 3 ? toIsoDate(dates[2]) : null;
+  
+  // CRITICAL FIX: Adjust renewal dates to current/future year
+  if (renewalDate) {
+    renewalDate = adjustRenewalToFuture(renewalDate);
+  }
   
   // Extract insurance company (comes after first date)
   // Companies: Digit, Bajaj General, Hdfc Ergo, Tata AIG, Zuno, Generali, ICICI, Oriental, Royal Sundaram
@@ -187,6 +192,34 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     premium: premium,
     sum_insured: sumInsured,
   };
+}
+
+/**
+ * Adjust a renewal date to current or next year if it's in the past.
+ * Keeps the same day and month, but updates the year to ensure it's upcoming.
+ */
+function adjustRenewalToFuture(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (isNaN(date.getTime())) return isoDate;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const renewalYear = date.getFullYear();
+  
+  // If renewal is in a past year, move it to current or next year
+  if (renewalYear < currentYear) {
+    // Set to current year first
+    date.setFullYear(currentYear);
+    
+    // If that date has already passed this year, move to next year
+    if (date < now) {
+      date.setFullYear(currentYear + 1);
+    }
+    
+    return date.toISOString().split('T')[0];
+  }
+  
+  return isoDate;
 }
 
 function toIsoDate(ddmmyyyy: string): string | null {

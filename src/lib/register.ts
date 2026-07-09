@@ -83,6 +83,34 @@ const POLICY_RE = /^\d{9}$/;
 const JUNK_LINE_RE =
   /^(policy register|total policy|total sa|total premium|test message|sn\b|policy no|name|d\.o\.c|plan|mode|premi|sum ass|f\.u\.p|mobile no|--\s*\d|\d{2}\/\d{2}\/\d{4}\s*-\s*\d{2}\/\d{2}\/\d{4}$|date\s*:)/i;
 
+/**
+ * Adjust a renewal date to current or next year if it's in the past.
+ * Keeps the same day and month, but updates the year to ensure it's upcoming.
+ */
+function adjustRenewalToFuture(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (isNaN(date.getTime())) return isoDate;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const renewalYear = date.getFullYear();
+  
+  // If renewal is in a past year, move it to current or next year
+  if (renewalYear < currentYear) {
+    // Set to current year first
+    date.setFullYear(currentYear);
+    
+    // If that date has already passed this year, move to next year
+    if (date < now) {
+      date.setFullYear(currentYear + 1);
+    }
+    
+    return date.toISOString().split('T')[0];
+  }
+  
+  return isoDate;
+}
+
 /** Quick check: does this look like a bulk register rather than one policy? */
 export function looksLikeRegister(text: string): boolean {
   const head = text.slice(0, 8000);
@@ -201,7 +229,12 @@ function parseRecord(tokens: string[], start: number, end: number): { row: Regis
       .trim() || null;
 
   const startDate = doc !== undefined ? toIsoDate(tokens[doc]) : null;
-  const renewalDate = fup !== undefined ? toIsoDate(tokens[fup]) : null;
+  let renewalDate = fup !== undefined ? toIsoDate(tokens[fup]) : null;
+  
+  // CRITICAL FIX: Adjust renewal dates to current/future year
+  if (renewalDate) {
+    renewalDate = adjustRenewalToFuture(renewalDate);
+  }
 
   // Between-block (Plan, Mode, Premium…, SumAss) lives between the two dates.
   let policyType: string | null = null;

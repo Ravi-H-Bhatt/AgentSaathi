@@ -149,7 +149,6 @@ export function NotificationToggle() {
         )}
         {state === "on" ? "Disable notifications" : "Enable notifications"}
       </button>
-      {error && <p className="px-3 text-xs text-red-600">{error}</p>}
     </>
   );
 }
