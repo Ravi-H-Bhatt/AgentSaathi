@@ -73,20 +73,27 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
   // Extract plan name (product name after LOB code)
   // LOB codes: 34 (MOTOR), 11, 31, 36 (various product lines)
   // Pattern: LOB_CODE PRODUCT_NAME policy_number
-  const planMatch = fullText.match(/(?:34|11|31|36)\s+([A-Z][A-Za-z\s\-&().]+?)\s+\d{20,25}/);
+  // IMPORTANT: Use GREEDY match to capture full product name including details like "FLOATER", "INDIVIDUAL", etc.
+  const planMatch = fullText.match(/(?:34|11|31|36)\s+([A-Z][A-Za-z\s\-&().\/]+)\s+\d{20,25}/);
   let rawPlan = planMatch ? planMatch[1].trim() : null;
   
   // If not found, try alternative pattern (sometimes product name comes after different markers)
   if (!rawPlan) {
-    const altPlanMatch = fullText.match(/210600\s+(?:34|11|31|36)\s+([A-Z][A-Za-z\s\-&().]+?)(?=\s+\d{20,25})/);
+    const altPlanMatch = fullText.match(/210600\s+(?:34|11|31|36)\s+([A-Z][A-Za-z\s\-&().\/]+)(?=\s+\d{20,25})/);
     rawPlan = altPlanMatch ? altPlanMatch[1].trim() : null;
   }
   
-  // Clean up plan name
+  // Clean up plan name - preserve full name but clean whitespace
   if (rawPlan) {
     rawPlan = rawPlan
-      .replace(/\s+/g, ' ') // normalize spaces
-      .replace(/\s+$/, '') // trim trailing
+      .replace(/\s+/g, ' ') // normalize multiple spaces to single space
+      .replace(/\s+$/, '') // trim trailing spaces
+      .trim();
+    
+    // Remove common trailing artifacts that aren't part of the product name
+    // But keep important qualifiers like FLOATER, INDIVIDUAL, COMPREHENSIVE, etc.
+    rawPlan = rawPlan
+      .replace(/\s+(POLICY|PLAN)\s*$/i, '') // Remove trailing "POLICY" or "PLAN" if redundant
       .trim();
   }
   
@@ -124,11 +131,11 @@ function extractPolicyFromChunk(fullText: string): RegisterRow | null {
     }
   }
   
-  // CRITICAL FIX: Adjust renewal dates to current/future year
-  // If renewal_date is in the past, move it forward to same day/month in current or next year
-  if (renewalDate) {
-    renewalDate = adjustRenewalToFuture(renewalDate);
-  }
+  // DON'T adjust renewal dates - preserve the original dates from PDFs
+  // The analytics layer will handle multi-year display
+  // if (renewalDate) {
+  //   renewalDate = adjustRenewalToFuture(renewalDate);
+  // }
   
   // Extract insured name - robust extraction
   let clientName: string | null = null;

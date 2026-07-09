@@ -27,7 +27,9 @@ function inr(n: number): string {
  * how much premium is due across the year, plus headline totals.
  */
 export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
-  const year = new Date().getFullYear();
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
   const [view, setView] = useState<"premium" | "count">("premium");
 
   const { monthly, totalDue, totalSI, busiestPremMonth, busiestCountMonth } = useMemo(() => {
@@ -44,14 +46,38 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       const d = new Date(p.renewal_date);
       if (isNaN(d.getTime())) continue;
 
-      // Analytics chart = ONLY renewals due in the CURRENT year, bucketed by
-      // month. Parsers ensure all renewal dates are adjusted to current/future year.
-      if (d.getFullYear() !== year) continue;
-
-      const m = d.getMonth();
-      prem[m] += p.premium || 0;
-      count[m] += 1;
-      totalDue += p.premium || 0; // premium due to collect THIS year
+      // Map renewal to upcoming 12-month period starting from current month
+      // For recurring annual renewals, we want to show the NEXT occurrence
+      const renewalMonth = d.getMonth();
+      const renewalYear = d.getFullYear();
+      
+      // Calculate the next occurrence of this renewal date
+      let nextRenewal = new Date(d);
+      
+      // If renewal is in a past year, move it to current year
+      if (renewalYear < currentYear) {
+        nextRenewal.setFullYear(currentYear);
+      }
+      
+      // If that date has already passed this year, move to next year
+      if (nextRenewal < now) {
+        nextRenewal.setFullYear(currentYear + 1);
+      }
+      
+      // Now check if this renewal falls within our 12-month display window
+      const displayYear = nextRenewal.getFullYear();
+      
+      // Only show renewals in current year OR next year (for recurring annual policies)
+      if (displayYear === currentYear || displayYear === currentYear + 1) {
+        const m = nextRenewal.getMonth();
+        prem[m] += p.premium || 0;
+        count[m] += 1;
+        
+        // Only add to totalDue if it's actually due in current year
+        if (displayYear === currentYear) {
+          totalDue += p.premium || 0;
+        }
+      }
     }
 
     const monthly = MONTHS.map((label, i) => ({
@@ -68,7 +94,7 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       busiestPremMonth: maxPrem > 0 ? MONTHS[prem.indexOf(maxPrem)] : "—",
       busiestCountMonth: maxCount > 0 ? MONTHS[count.indexOf(maxCount)] : "—",
     };
-  }, [policies, year]);
+  }, [policies, currentYear, currentMonth, now]);
 
   const busiestMonth = view === "premium" ? busiestPremMonth : busiestCountMonth;
   const values = monthly.map((m) => (view === "premium" ? m.premium : m.count));
@@ -125,7 +151,7 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
 
       {/* Headline stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-border border-b border-border">
-        <Stat icon={<IndianRupee size={15} />} label={`Premium due in ${year}`} value={inr(totalDue)} />
+        <Stat icon={<IndianRupee size={15} />} label={`Premium due in ${currentYear}`} value={inr(totalDue)} />
         <Stat icon={<TrendingUp size={15} />} label="Total sum insured" value={inr(totalSI)} />
         <Stat icon={<CalendarClock size={15} />} label="Busiest renewal month" value={busiestMonth} />
       </div>
@@ -133,7 +159,7 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       {/* Line chart */}
       <div className="p-5">
         <p className="text-xs text-muted mb-3">
-          {view === "premium" ? "Premium due" : "Policies renewing"} by month · {year}
+          {view === "premium" ? "Premium due" : "Policies renewing"} by month · Next 12 months
         </p>
         <div className="w-full overflow-x-auto">
           <svg

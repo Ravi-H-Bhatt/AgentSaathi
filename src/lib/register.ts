@@ -231,10 +231,11 @@ function parseRecord(tokens: string[], start: number, end: number): { row: Regis
   const startDate = doc !== undefined ? toIsoDate(tokens[doc]) : null;
   let renewalDate = fup !== undefined ? toIsoDate(tokens[fup]) : null;
   
-  // CRITICAL FIX: Adjust renewal dates to current/future year
-  if (renewalDate) {
-    renewalDate = adjustRenewalToFuture(renewalDate);
-  }
+  // DON'T adjust renewal dates - preserve the original dates from PDFs
+  // The analytics layer will handle multi-year display
+  // if (renewalDate) {
+  //   renewalDate = adjustRenewalToFuture(renewalDate);
+  // }
 
   // Between-block (Plan, Mode, Premium…, SumAss) lives between the two dates.
   let policyType: string | null = null;

@@ -6,7 +6,10 @@
     "dev": "NODE_OPTIONS=--max-http-header-size=65536 next dev",
     "build": "next build",
     "start": "NODE_OPTIONS=--max-http-header-size=65536 next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit-policies": "tsx scripts/audit-and-fix-policies.ts",
+    "import-missing": "tsx scripts/import-missing-policies.ts",
+    "fix-product-names": "tsx scripts/fix-product-names.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
@@ -36,6 +39,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }
