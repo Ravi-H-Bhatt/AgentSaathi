@@ -12,25 +12,54 @@ import type {
   ActivityLog,
 } from "@/lib/types";
 
+/**
+ * Fetch ALL rows from a table for an agent, paginating past Supabase's
+ * default 1,000-row cap. Without this, dashboards/lists silently top out
+ * at 1,000 records no matter how many exist.
+ */
+async function fetchAllRows<T>(
+  build: (
+    db: ReturnType<typeof createAdminClient>,
+    from: number,
+    to: number
+  ) => PromiseLike<{ data: unknown }>
+): Promise<T[]> {
+  const db = createAdminClient();
+  const pageSize = 1000;
+  let from = 0;
+  const all: T[] = [];
+  for (;;) {
+    const { data } = await build(db, from, from + pageSize - 1);
+    const batch = (data as T[]) || [];
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 /** All clients for an agent, alphabetized. */
 export async function getClients(agentId: string): Promise<Client[]> {
-  const db = createAdminClient();
-  const { data } = await db
-    .from("clients")
-    .select("*")
-    .eq("agent_id", agentId)
-    .order("full_name", { ascending: true });
-  return (data as Client[]) || [];
+  return fetchAllRows<Client>((db, from, to) =>
+    db
+      .from("clients")
+      .select("*")
+      .eq("agent_id", agentId)
+      .order("full_name", { ascending: true })
+      .range(from, to)
+  );
 }
 
 /** All policies for an agent. */
 export async function getPolicies(agentId: string): Promise<Policy[]> {
-  const db = createAdminClient();
-  const { data } = await db
-    .from("policies")
-    .select("*")
-    .eq("agent_id", agentId);
-  return (data as Policy[]) || [];
+  return fetchAllRows<Policy>((db, from, to) =>
+    db
+      .from("policies")
+      .select("*")
+      .eq("agent_id", agentId)
+      .order("renewal_date", { ascending: true })
+      .range(from, to)
+  );
 }
 
 /** A single client with all their policies (ownership enforced). */
@@ -61,28 +90,20 @@ export async function getClientWithPolicies(
 export async function getAllClientsWithPolicies(
   agentId: string
 ): Promise<ClientWithPolicies[]> {
-  const db = createAdminClient();
-  const [{ data: clients }, { data: policies }] = await Promise.all([
-    db
-      .from("clients")
-      .select("*")
-      .eq("agent_id", agentId)
-      .order("full_name", { ascending: true }),
-    db
-      .from("policies")
-      .select("*")
-      .eq("agent_id", agentId)
-      .order("renewal_date", { ascending: true }),
+  // Fetch ALL clients and ALL policies (paginated past the 1,000-row cap).
+  const [clients, policies] = await Promise.all([
+    getClients(agentId),
+    getPolicies(agentId),
   ]);
 
   const byClient = new Map<string, Policy[]>();
-  for (const p of (policies as Policy[]) || []) {
+  for (const p of policies) {
     const arr = byClient.get(p.client_id) || [];
     arr.push(p);
     byClient.set(p.client_id, arr);
   }
 
-  return ((clients as Client[]) || []).map((c) => ({
+  return clients.map((c) => ({
     ...c,
     policies: byClient.get(c.id) || [],
   }));
