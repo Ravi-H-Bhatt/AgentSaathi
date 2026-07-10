@@ -8,6 +8,10 @@ import { RenewalsList } from "@/components/RenewalsList";
 import { PremiumAnalytics } from "@/components/PremiumAnalytics";
 import type { Client, Policy } from "@/lib/types";
 
+// Always render fresh so renewal day-counts and totals are never stale.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function DashboardPage() {
   const agent = (await getCurrentAgent())!;
   const ownerId = ownerIdFor(agent);
@@ -22,13 +26,13 @@ export default async function DashboardPage() {
   const clientById = new Map(clients.map((c) => [c.id, c]));
 
   // Renewals list uses the CANONICAL recurring-renewal logic (daysUntil):
-  //   - annual recurrence: same dd/mm rolls to next year once >3 days past
-  //   - a date that passed 1-3 days ago shows as OVERDUE (still in the list)
-  //   - include anything from OVERDUE(-3) up to 30 days ahead
+  //   - annual recurrence: same dd/mm rolls to next year once >7 days past
+  //   - a date that passed up to 7 days ago shows as OVERDUE (still in the list)
+  //   - include anything from OVERDUE(-7) up to 30 days ahead
   //   - sort by urgency: most overdue first, then soonest upcoming
   const renewalsThisMonth = policies
     .map((p) => ({ p, d: daysUntil(p.renewal_date) }))
-    .filter(({ d }) => d != null && d >= -3 && d <= 30)
+    .filter(({ d }) => d != null && d >= -7 && d <= 30)
     .sort((a, b) => (a.d as number) - (b.d as number))
     .map(({ p }) => p);
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);

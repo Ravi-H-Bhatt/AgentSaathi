@@ -70,8 +70,10 @@ export function effectiveRenewalDate(
 
   const deltaDays = Math.floor((occ.getTime() - now.getTime()) / 86_400_000);
 
-  // Overdue by more than 3 days → the relevant renewal is next year's.
-  if (deltaDays < -3) {
+  // Grace window: keep showing a renewal as OVERDUE for up to 7 days after it
+  // passes (so agents can still follow up). Only once it's more than 7 days
+  // past do we roll to next year's occurrence.
+  if (deltaDays < -7) {
     occ.setFullYear(now.getFullYear() + 1);
   }
 
