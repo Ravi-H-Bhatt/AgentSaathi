@@ -20,7 +20,7 @@ import { looksLikeERegister, parseERegister } from "./eregister-parser";
  * AUTO-DETECT and parse any supported register type.
  * Returns parsed policies with metadata about which parser was used.
  */
-export async function parseRegisterAuto(text: string): Promise<{ 
+export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<{ 
   rows: RegisterRow[]; 
   type: 'newindia' | 'tmi' | 'eregister' | 'lic' | 'unknown';
   confidence: number;
@@ -35,7 +35,9 @@ export async function parseRegisterAuto(text: string): Promise<{
   // Check E-Register (TMI multi-company format with PZ transaction IDs)
   if (looksLikeERegister(text)) {
     console.log('[register] Detected: E-Register (TMI Multi-Company Format)');
-    const rows = await parseERegister(Buffer.from(text));
+    // Use buffer if provided, otherwise convert text to buffer
+    const pdfBuffer = buffer || Buffer.from(text);
+    const rows = await parseERegister(pdfBuffer);
     return { rows, type: 'eregister', confidence: 0.95 };
   }
   

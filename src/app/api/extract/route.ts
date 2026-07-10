@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Use auto-detection to parse any supported register type
-  const { rows, type, confidence } = await parseRegisterAuto(text);
+  const { rows, type, confidence } = await parseRegisterAuto(text, bytes);
   if (rows.length > 0 && confidence >= 0.5) {
     // For New India registers, use fast coordinate-based extraction
     if (type === 'newindia') {
