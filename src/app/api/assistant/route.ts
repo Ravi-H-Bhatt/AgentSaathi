@@ -62,8 +62,16 @@ function buildContext(clients: Client[], policies: Policy[], question: string): 
     .filter((s) => s.score > 0)
     .sort((a, b) => b.score - a.score)
     .map((s) => s.client);
-  // If the question names specific clients, use those; otherwise a capped sample.
-  const selected = matched.length > 0 ? matched.slice(0, 25) : clients.slice(0, 40);
+
+  // If the question doesn't name a specific client (greetings, general finance
+  // questions, email drafts, etc.), DON'T dump the whole book — that bloats the
+  // request and hits the model's tokens-per-minute cap (causing "unavailable").
+  // Send a tiny summary instead; the agent can name a client for details.
+  if (matched.length === 0) {
+    return `SUMMARY: The agent has ${clients.length} clients and ${policies.length} policies on record. (Ask about a client by name to see their exact details.)`;
+  }
+
+  const selected = matched.slice(0, 25);
 
   const MAX_CHARS = 12000; // keep CONTEXT well under the TPM budget
   const lines: string[] = [];

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor, permissionsFor } from "@/lib/team";
 import { draftEmailWithAi } from "@/lib/groq";
 import type { Client, Policy } from "@/lib/types";
@@ -26,13 +26,31 @@ function buildContext(clients: Client[], policies: Policy[], question: string): 
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length >= 3);
 
+  // Ignore generic words so they don't match client names by accident.
+  const STOP = new Set([
+    "the", "and", "for", "draft", "write", "email", "mail", "renewal",
+    "reminder", "letter", "send", "please", "client", "policy", "note",
+    "message", "birthday", "wish", "thank", "you", "follow", "up",
+  ]);
+  const nameWords = qWords.filter((w) => !STOP.has(w));
+
   const scored = clients.map((c) => {
     const name = (c.full_name || "").toLowerCase();
-    const score = qWords.reduce((s, w) => (name.includes(w) ? s + 1 : s), 0);
+    const score = nameWords.reduce((s, w) => (name.includes(w) ? s + 1 : s), 0);
     return { client: c, score };
   });
-  const matched = scored.filter((s) => s.score > 0).map((s) => s.client);
-  const selected = matched.length > 0 ? matched : clients.slice(0, 30);
+  const matched = scored
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((s) => s.client);
+
+  // No specific client named → don't dump the whole book (avoids hitting the
+  // model's tokens-per-minute cap). A generic template needs no client data.
+  if (matched.length === 0) {
+    return `SUMMARY: The agent has ${clients.length} clients on record. No specific client was named — draft a generic template (greet 'Dear Valued Client' and leave 'to' empty).`;
+  }
+
+  const selected = matched.slice(0, 15);
 
   const MAX_CHARS = 10000;
   const lines: string[] = [];
@@ -79,24 +97,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing question" }, { status: 400 });
   }
 
-  const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
 
-  // Load agent's data
-  const { data: clients } = await db
-    .from("clients")
-    .select("*")
-    .eq("agent_id", ownerId);
-  const { data: policies } = await db
-    .from("policies")
-    .select("*")
-    .eq("agent_id", ownerId);
+  // Load ALL of the agent's data (paginated past the 1000-row cap).
+  const [clients, policies] = await Promise.all([
+    getClients(ownerId),
+    getPolicies(ownerId),
+  ]);
 
-  const context = buildContext(
-    (clients as Client[]) || [],
-    (policies as Policy[]) || [],
-    question
-  );
+  const context = buildContext(clients, policies, question);
 
   try {
     const result = await draftEmailWithAi(

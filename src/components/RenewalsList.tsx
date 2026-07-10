@@ -191,7 +191,7 @@ export function RenewalsList({
                 </p>
               </Link>
               <div className="flex items-center gap-3 shrink-0">
-                <div className="text-right">
+                <div className="text-right w-24 shrink-0">
                   <p className="text-sm font-medium">{shortDate(adjustedDate)}</p>
                   <p className={`text-xs font-semibold ${
                     dleft != null && dleft < 0 
@@ -210,9 +210,11 @@ export function RenewalsList({
                   </p>
                 </div>
                 
-                {/* Mark as Renewed button */}
+                {/* Fixed-width action area → keeps the date column aligned
+                    whether or not the WhatsApp button is present. */}
+                <div className="flex items-center justify-end gap-2 w-[210px] shrink-0">
                 {isConfirming ? (
-                  <div className="flex items-center gap-2">
+                  <>
                     <button
                       onClick={() => markAsRenewed(item.id)}
                       disabled={isProcessing}
@@ -233,7 +235,7 @@ export function RenewalsList({
                     >
                       <X size={13} />
                     </button>
-                  </div>
+                  </>
                 ) : (
                   <>
                     <button
@@ -259,6 +261,7 @@ export function RenewalsList({
                     )}
                   </>
                 )}
+                </div>
               </div>
             </li>
           );
