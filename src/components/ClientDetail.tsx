@@ -209,7 +209,7 @@ export function ClientDetail({
                         )}
                       </p>
                       <p className="text-sm text-muted">
-                        {p.company || "—"} · {p.policy_number || "No number"}
+                        {p.company || "—"} · Policy #{p.policy_number || "No number"}
                         {p.policy_type && p.product_name && p.product_name !== p.policy_type && (
                           <span className="ml-2">· {p.policy_type}</span>
                         )}
@@ -269,6 +269,12 @@ export function ClientDetail({
                     <Field label="Start" value={shortDate(p.start_date)} />
                     <Field label="Renewal" value={shortDate(p.renewal_date)} />
                   </dl>
+                  {p.client_address && (
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <dt className="text-muted text-xs">Address</dt>
+                      <dd className="font-medium mt-1 text-sm">{p.client_address}</dd>
+                    </div>
+                  )}
                 </div>
               );
             })}

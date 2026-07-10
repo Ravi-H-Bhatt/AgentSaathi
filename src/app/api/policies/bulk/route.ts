@@ -158,6 +158,8 @@ export async function POST(request: NextRequest) {
         client_id: clientId,
         company: null as string | null,
         policy_type: r.policy_type,
+        product_name: r.product_name || null,
+        client_address: r.client_address || null,
         policy_number: r.policy_number,
         sum_insured: r.sum_insured,
         premium: r.premium,

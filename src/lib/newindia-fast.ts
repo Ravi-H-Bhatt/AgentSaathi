@@ -28,7 +28,7 @@ const COLUMNS = {
   phone1: { x: 849, width: 48 },                // 849-897, next starts at 900
   dev_officer_code: { x: 900, width: 50 },      // 900-950, next starts at 955
   dev_officer_name: { x: 955, width: 47 },      // 955-1002, next starts at 1007
-  sum_insured: { x: 1002, width: 65 },          // 1002-1067, next starts at 1067
+  sum_insured: { x: 1002, width: 60 },          // 1002-1062, STOP at 1062 (premium at 1063)
   gross_premium: { x: 1063, width: 60 },        // 1063-1123, next starts at 1128
   service_tax: { x: 1128, width: 65 },          // 1128-1193
 };
@@ -132,12 +132,30 @@ function extractColumn(
 }
 
 /**
- * Parse money value
+ * Parse money value - extracts ONLY the first complete number
+ * Handles cases where multiple numbers are concatenated with spaces
  */
 function parseMoney(s: string): number | null {
   if (!s) return null;
+  
+  // First, try to find the first number pattern with commas (Indian format)
+  // Match patterns like: 1,900,000 or 800,000 or 12,500,000
+  const match = s.match(/\d{1,3}(?:,\d{3})*(?:,\d{3})*/);
+  if (match) {
+    const cleaned = match[0].replace(/,/g, '');
+    return parseInt(cleaned, 10);
+  }
+  
+  // Fallback: remove all non-digits and parse
   const cleaned = s.replace(/[^\d]/g, '');
-  return cleaned ? parseInt(cleaned, 10) : null;
+  if (!cleaned) return null;
+  
+  // If the number is suspiciously long (>10 digits), take only first 8-9 digits
+  if (cleaned.length > 10) {
+    return parseInt(cleaned.substring(0, 9), 10);
+  }
+  
+  return parseInt(cleaned, 10);
 }
 
 /**
