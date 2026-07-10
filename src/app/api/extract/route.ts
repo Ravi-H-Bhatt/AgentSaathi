@@ -94,6 +94,24 @@ export async function POST(request: NextRequest) {
       });
     }
     
+    // For E-Register, use coordinate-based extraction directly from buffer
+    if (type === 'eregister') {
+      console.log('[extract] Using coordinate extraction for E-Register');
+      const { parseERegister } = await import('@/lib/eregister-parser');
+      const eRegisterRows = await parseERegister(bytes);
+      
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: false,
+        mode: "bulk",
+        rowCount: eRegisterRows.length,
+        rows: eRegisterRows,
+        registerType: type,
+        confidence: 1.0, // Coordinate-based is 100% reliable
+      });
+    }
+    
     return NextResponse.json({
       filePath: path,
       fileName: file.name,

@@ -1,6 +1,7 @@
 import type { RegisterRow } from "@/lib/types";
 import { looksLikeNewIndiaRegister, parseNewIndiaRegister } from "./newindia";
 import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
+import { looksLikeERegister, parseERegister } from "./eregister-parser";
 
 /**
  * AUTO-DETECTING REGISTER PARSER
@@ -21,7 +22,7 @@ import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
  */
 export async function parseRegisterAuto(text: string): Promise<{ 
   rows: RegisterRow[]; 
-  type: 'newindia' | 'tmi' | 'lic' | 'unknown';
+  type: 'newindia' | 'tmi' | 'eregister' | 'lic' | 'unknown';
   confidence: number;
 }> {
   // Check New India first (most distinctive: 20-25 digit policy numbers)
@@ -29,6 +30,13 @@ export async function parseRegisterAuto(text: string): Promise<{
     console.log('[register] Detected: New India Assurance Policy Expiry Register');
     const rows = await parseNewIndiaRegister(text);
     return { rows, type: 'newindia', confidence: 0.95 };
+  }
+  
+  // Check E-Register (TMI multi-company format with PZ transaction IDs)
+  if (looksLikeERegister(text)) {
+    console.log('[register] Detected: E-Register (TMI Multi-Company Format)');
+    const rows = await parseERegister(Buffer.from(text));
+    return { rows, type: 'eregister', confidence: 0.95 };
   }
   
   // Check TMI E-Register (PZ transaction IDs, TMI header)
