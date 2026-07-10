@@ -1,59 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Wrench } from "lucide-react";
 
 /**
- * Full-screen "Work in Progress" overlay shown to agents/colleagues while
- * the admin has maintenance mode ON. It polls every few seconds and, once
- * the admin turns it OFF, automatically refreshes back into the app.
+ * Full-screen "Work in Progress" overlay (presentational only).
+ * Visibility is controlled by <MaintenanceWatcher/>, which polls every 2s.
  */
-export function MaintenanceScreen({ message }: { message: string | null }) {
-  const router = useRouter();
-  const [checking, setChecking] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function poll() {
-      try {
-        const res = await fetch("/api/maintenance", { cache: "no-store" });
-        const data = await res.json();
-        if (!cancelled && !data.active) {
-          // Admin turned it off → reload back into the app.
-          router.refresh();
-          window.location.reload();
-        }
-      } catch {
-        /* ignore transient errors, keep polling */
-      }
-    }
-
-    const interval = setInterval(poll, 4000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [router]);
-
-  async function checkNow() {
-    setChecking(true);
-    try {
-      const res = await fetch("/api/maintenance", { cache: "no-store" });
-      const data = await res.json();
-      if (!data.active) {
-        router.refresh();
-        window.location.reload();
-        return;
-      }
-    } catch {
-      /* ignore */
-    }
-    setTimeout(() => setChecking(false), 800);
-  }
-
+export function MaintenanceScreen({ message }: { message?: string | null }) {
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black text-white px-6 text-center overflow-hidden">
       {/* Soft animated background glow */}
@@ -110,16 +64,8 @@ export function MaintenanceScreen({ message }: { message: string | null }) {
         ))}
       </div>
 
-      <button
-        onClick={checkNow}
-        disabled={checking}
-        className="relative mt-10 rounded-full border border-white/25 px-5 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white hover:text-black disabled:opacity-50"
-      >
-        {checking ? "Checking…" : "Check again"}
-      </button>
-
-      <p className="relative mt-6 text-xs text-white/40">
-        This page updates automatically.
+      <p className="relative mt-10 text-xs text-white/40">
+        This screen updates automatically — no need to refresh.
       </p>
     </div>
   );

@@ -23,6 +23,7 @@ import { ProfileEditor } from "@/components/ProfileEditor";
 import { ReportIssue } from "@/components/ReportIssue";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { ClockWidget } from "@/components/ClockWidget";
+import { MaintenanceWatcher } from "@/components/MaintenanceWatcher";
 import type { Permissions } from "@/lib/types";
 
 export function AppShell({
@@ -33,6 +34,8 @@ export function AppShell({
   isColleague,
   permissions,
   openSince,
+  maintenanceActive = false,
+  maintenanceMessage = null,
 }: {
   children: React.ReactNode;
   agentName: string;
@@ -41,6 +44,8 @@ export function AppShell({
   isColleague: boolean;
   permissions: Permissions;
   openSince: string | null;
+  maintenanceActive?: boolean;
+  maintenanceMessage?: string | null;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -192,6 +197,12 @@ export function AppShell({
 
   return (
     <div className="min-h-screen flex">
+      {/* Live "work in progress" overlay — polls every 2s, no refresh needed */}
+      <MaintenanceWatcher
+        initialActive={maintenanceActive}
+        initialMessage={maintenanceMessage}
+      />
+
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 border-r border-border bg-card flex-col fixed inset-y-0">
         {SidebarContent}

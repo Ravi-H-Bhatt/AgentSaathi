@@ -4,7 +4,6 @@ import { getOpenTimeEntry } from "@/lib/data";
 import { getMaintenance } from "@/lib/settings";
 import { permissionsFor, isColleague } from "@/lib/team";
 import { AppShell } from "@/components/AppShell";
-import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 
 // Authenticated area depends on the request session — never prerender.
 export const dynamic = "force-dynamic";
@@ -19,11 +18,15 @@ export default async function AppLayout({
   if (agent.role === "admin") redirect("/admin");
   if (agent.status !== "approved") redirect("/pending");
 
-  // Global "work in progress" mode — blocks all agents/colleagues (not admin,
-  // who lives under /admin). Auto-recovers when the admin turns it off.
-  const maintenance = await getMaintenance();
-  if (maintenance.active) {
-    return <MaintenanceScreen message={maintenance.message} />;
+  // Global "work in progress" mode — the overlay is rendered LIVE inside
+  // AppShell by <MaintenanceWatcher/> (polls every 2s), so it appears and
+  // disappears for all agents without any manual refresh. We pass the initial
+  // state from the server to avoid a flash on cold load (installed PWA).
+  let maintenance = { active: false, message: null as string | null };
+  try {
+    maintenance = await getMaintenance();
+  } catch {
+    /* settings table may not exist yet */
   }
 
   const openEntry = await getOpenTimeEntry(agent.id);
@@ -36,6 +39,8 @@ export default async function AppLayout({
       isColleague={isColleague(agent)}
       permissions={permissionsFor(agent)}
       openSince={openEntry?.clock_in ?? null}
+      maintenanceActive={maintenance.active}
+      maintenanceMessage={maintenance.message}
     >
       {children}
     </AppShell>
