@@ -108,9 +108,12 @@ function extractColumn(
       'Policy Number', 'Policy', 'Inception', 'Expiry', 'Date',
       'Insured', 'Name', 'Address', 'Line', 'Pin', 'Code',
       'Product', 'Lob', 'Description', 'Holder', 'Operating',
-      'From', 'Party', 'Report', 'Page'
+      'From', 'Party', 'Report', 'Page', 'Insured Name',
+      'Insured Address', 'Line 1', 'Line 2', 'Line 3',
+      'THE NEW INDIA ASSURANCE COMPANY LTD.', 'Mahatma Gandhi Road',
+      'Website:', 'http://www.newindia.co.in', 'Party Name :'
     ];
-    return headers.includes(str);
+    return headers.some(h => str.includes(h));
   };
   
   const filtered = items
@@ -249,8 +252,28 @@ function extractRecord(
   
   if (!policyNumber) return null;
   
-  // Clean name: remove any prefixes like "Mr", "Mrs", "Ms" if needed, but keep the name intact
-  const cleanName = insuredName.trim();
+  // Clean name: remove any label text that leaked in
+  let cleanName = insuredName.trim();
+  
+  // Remove "Insured Name" labels
+  cleanName = cleanName.replace(/\bInsured\s+Name\b/gi, '').trim();
+  
+  // Remove company header text
+  cleanName = cleanName.replace(/\bTHE NEW INDIA ASSURANCE COMPANY LTD\b.*$/gi, '').trim();
+  cleanName = cleanName.replace(/\bMahatma Gandhi Road.*$/gi, '').trim();
+  cleanName = cleanName.replace(/\bWebsite:.*$/gi, '').trim();
+  cleanName = cleanName.replace(/\bParty Name\s*:.*$/gi, '').trim();
+  
+  // If name still has multiple consecutive words separated by large spaces (likely leaked address), 
+  // take only the first 2-3 words
+  const nameParts = cleanName.split(/\s+/);
+  if (nameParts.length > 5) {
+    // Likely has leaked text - take first 4 words max
+    cleanName = nameParts.slice(0, 4).join(' ');
+  }
+  
+  // Final trim
+  cleanName = cleanName.replace(/\s+/g, ' ').trim();
   
   // Combine address with pincode
   const addressParts = [address1, address2, address3, pinCode].filter(Boolean);
