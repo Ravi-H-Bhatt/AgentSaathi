@@ -77,13 +77,24 @@ export async function POST(request: NextRequest) {
   //   - Same policy# but different premium/date/product => DIFFERENT policy (kept)
   //   - Truly identical rows => skipped
   // Re-uploading the same PDF adds anything not already stored exactly.
+  // Normalize a numeric value to a canonical string so 5170, 5170.0 and "5170.00"
+  // all compare equal (prevents the same policy being treated as new → doubling).
+  const numKey = (n: number | string | null | undefined): string => {
+    if (n == null || n === "") return "";
+    const v = Number(n);
+    return isNaN(v) ? "" : String(v);
+  };
+  // Normalize a date to YYYY-MM-DD (DB may return with a time component).
+  const dateKey = (d: string | null | undefined): string =>
+    d ? String(d).slice(0, 10) : "";
+
   const rowKey = (
     clientName: string,
     policyNumber: string | null,
     productName: string | null,
     policyType: string | null,
-    premium: number | null,
-    sumInsured: number | null,
+    premium: number | string | null,
+    sumInsured: number | string | null,
     startDate: string | null,
     renewalDate: string | null
   ): string =>
@@ -92,10 +103,10 @@ export async function POST(request: NextRequest) {
       nameKey(clientName),
       (productName || "").trim().toLowerCase(),
       (policyType || "").trim().toLowerCase(),
-      premium ?? "",
-      sumInsured ?? "",
-      startDate || "",
-      renewalDate || "",
+      numKey(premium),
+      numKey(sumInsured),
+      dateKey(startDate),
+      dateKey(renewalDate),
     ].join("|");
 
   // ---- 1. Build set of existing policy keys (paginated over ALL policies). ----
@@ -204,7 +215,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ---- 3. Build & insert policies, linked to their client. ----
+  // ---- 3. Build policy rows, linked to their client. ----
   const policyRows = toImport
     .map((r) => {
       const clientId = clientIdByKey.get(nameKey(r.client_name!));
@@ -227,59 +238,91 @@ export async function POST(request: NextRequest) {
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
+  // ---- 4. Pre-fetch existing non-null policy_numbers so we know which rows
+  //         could hit the legacy unique constraint (agent_id, policy_number). ----
+  const existingPolicyNumbers = new Set<string>();
+  {
+    let from = 0;
+    const pageSize = 1000;
+    for (;;) {
+      const { data } = await db
+        .from("policies")
+        .select("policy_number")
+        .eq("agent_id", ownerId)
+        .not("policy_number", "is", null)
+        .range(from, from + pageSize - 1);
+      const batch = (data as { policy_number: string | null }[]) || [];
+      if (batch.length === 0) break;
+      for (const p of batch) if (p.policy_number) existingPolicyNumbers.add(p.policy_number);
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  // Split rows into SAFE (guaranteed insertable) and RISKY (may collide on the
+  // legacy unique constraint). SAFE = no policy_number (constraint allows NULL)
+  // OR a policy_number not already in the DB and not seen earlier this batch.
+  const numbersSeenThisBatch = new Set<string>();
+  const safeRows: typeof policyRows = [];
+  const riskyRows: typeof policyRows = [];
+  for (const row of policyRows) {
+    const num = row.policy_number;
+    if (!num) {
+      safeRows.push(row); // NULL policy_number never violates the constraint.
+      continue;
+    }
+    if (existingPolicyNumbers.has(num) || numbersSeenThisBatch.has(num)) {
+      riskyRows.push(row); // Would collide → handle individually.
+    } else {
+      numbersSeenThisBatch.add(num);
+      safeRows.push(row);
+    }
+  }
+
   let created = 0;
   let skippedConflict = 0;
-  for (let i = 0; i < policyRows.length; i += 500) {
-    const chunk = policyRows.slice(i, i + 500);
-    let { error, count } = await db
-      .from("policies")
-      .insert(chunk, { count: "exact" });
 
-    // Graceful fallback: if the DB doesn't have the `mode` column yet
-    // (migration 0001 not run), retry without it instead of failing the import.
+  // Helper: insert a chunk, transparently retrying without `mode` if that
+  // column doesn't exist yet, and falling back to row-by-row on any conflict.
+  async function insertChunk(chunk: typeof policyRows): Promise<void> {
+    let { error, count } = await db.from("policies").insert(chunk, { count: "exact" });
+
     if (error && /mode/i.test(error.message) && /column/i.test(error.message)) {
       const chunkNoMode = chunk.map(({ mode: _mode, ...rest }) => rest);
-      ({ error, count } = await db
-        .from("policies")
-        .insert(chunkNoMode, { count: "exact" }));
-    }
-
-    // Graceful fallback: if the old unique constraint still exists in the DB
-    // (migration 0008 not yet run), a whole chunk fails because ONE row shares
-    // a policy_number. Retry the chunk row-by-row so all non-conflicting rows
-    // still get imported and NO data is damaged.
-    if (error && /duplicate key/i.test(error.message)) {
-      for (const row of chunk) {
-        const { error: rowErr } = await db.from("policies").insert(row);
-        if (rowErr) {
-          if (/duplicate key/i.test(rowErr.message)) {
-            skippedConflict++; // Blocked by legacy unique constraint — skip safely.
-          } else if (/mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
-            const { mode: _mode, ...rest } = row;
-            const { error: retryErr } = await db.from("policies").insert(rest);
-            if (retryErr) skippedConflict++;
-            else created++;
-          } else {
-            skippedConflict++;
-          }
-        } else {
-          created++;
-        }
-      }
-      continue; // Move to next chunk.
+      ({ error, count } = await db.from("policies").insert(chunkNoMode, { count: "exact" }));
     }
 
     if (error) {
-      return NextResponse.json(
-        {
-          error: "Failed to import policies: " + error.message,
-          created,
-          clientsCreated,
-        },
-        { status: 500 }
-      );
+      // Fall back to row-by-row so one bad row never blocks the rest.
+      for (const row of chunk) {
+        let { error: rowErr } = await db.from("policies").insert(row);
+        if (rowErr && /mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
+          const { mode: _mode, ...rest } = row;
+          ({ error: rowErr } = await db.from("policies").insert(rest));
+        }
+        if (rowErr) skippedConflict++;
+        else created++;
+      }
+      return;
     }
     created += count ?? chunk.length;
+  }
+
+  // Bulk-insert all SAFE rows (this covers every no-number policy + all uniques).
+  for (let i = 0; i < safeRows.length; i += 500) {
+    await insertChunk(safeRows.slice(i, i + 500));
+  }
+
+  // RISKY rows: insert one-by-one. If the constraint still exists they are
+  // skipped safely; once the constraint is dropped they insert fine.
+  for (const row of riskyRows) {
+    let { error: rowErr } = await db.from("policies").insert(row);
+    if (rowErr && /mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
+      const { mode: _mode, ...rest } = row;
+      ({ error: rowErr } = await db.from("policies").insert(rest));
+    }
+    if (rowErr) skippedConflict++;
+    else created++;
   }
 
   await logActivity(
@@ -293,6 +336,7 @@ export async function POST(request: NextRequest) {
     created,
     duplicates,
     skippedNoName,
+    skippedConflict,
     clientsCreated,
   });
 }
