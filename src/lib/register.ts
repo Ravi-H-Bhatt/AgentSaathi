@@ -19,15 +19,15 @@ import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
  * AUTO-DETECT and parse any supported register type.
  * Returns parsed policies with metadata about which parser was used.
  */
-export function parseRegisterAuto(text: string): { 
+export async function parseRegisterAuto(text: string): Promise<{ 
   rows: RegisterRow[]; 
   type: 'newindia' | 'tmi' | 'lic' | 'unknown';
   confidence: number;
-} {
+}> {
   // Check New India first (most distinctive: 20-25 digit policy numbers)
   if (looksLikeNewIndiaRegister(text)) {
     console.log('[register] Detected: New India Assurance Policy Expiry Register');
-    const rows = parseNewIndiaRegister(text);
+    const rows = await parseNewIndiaRegister(text);
     return { rows, type: 'newindia', confidence: 0.95 };
   }
   

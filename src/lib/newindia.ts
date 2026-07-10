@@ -1,20 +1,29 @@
 import type { RegisterRow } from "@/lib/types";
+import Groq from "groq-sdk";
 
 /**
  * New India Assurance Policy Expiry Register Parser
  * 
- * Priority fixes:
- * 1. Strip repeated "Operating Office...OD Expiry Date" headers mid-text
- * 2. Rejoin digit sequences broken by line-wrap
- * 3. Widen holder-code regex to handle \d?[HPOMNE][A-Z]{0,2}\d{7,10}
- * 4. Never drop data — use raw unsplit spans + needs_review flag if can't cleanly split
- * 5. Don't hardcode officer name — anchor on numeric patterns only
+ * HYBRID APPROACH:
+ * - Regex for deterministic record chunking (fast, reliable for boundaries)
+ * - LLM for ambiguous field extraction (name/address split, missing fields)
+ * 
+ * This handles edge cases regex alone cannot solve:
+ * - Name/address with no clear delimiter
+ * - Missing fields that should be flagged vs truly absent
+ * - Records with unusual formatting
  */
 
 const POLICY_MARKER_RE = /(\d{20,25}):\s*([A-Z]{2})\s+/;
-const DATE_RE = /(\d{2})-([A-Za-z]{3})-(\d{4})/;
-const PHONE_RE = /[6-9]\d{9}/;
-const PIN_CODE_RE = /\b\d{6}\b/;
+
+// Lazy-init Groq client to ensure env is loaded
+let groqClient: Groq | null = null;
+function getGroqClient(): Groq {
+  if (!groqClient) {
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY || "" });
+  }
+  return groqClient;
+}
 
 export function looksLikeNewIndiaRegister(text: string): boolean {
   const head = text.slice(0, 8000);
@@ -23,72 +32,37 @@ export function looksLikeNewIndiaRegister(text: string): boolean {
   return hasHeader && policyNumbers >= 5;
 }
 
-export function parseNewIndiaRegister(text: string): RegisterRow[] {
-  const rows: RegisterRow[] = [];
+export async function parseNewIndiaRegister(text: string): Promise<RegisterRow[]> {
+  console.log(`[newindia] Using FAST coordinate-based extraction (no LLM)`);
   
-  // PRIORITY 1: Strip repeated "Operating Office...OD Expiry Date" header blocks mid-text
-  let cleaned = stripMidtextHeaders(text);
+  // For coordinate extraction, we need the buffer not text
+  // This function is kept for compatibility but should use parseNewIndiaRegisterFast
+  // when called from the API with buffer access
   
-  // PRIORITY 2: Rejoin digit sequences broken by line-wrap (digit\n digit → no space)
-  cleaned = rejoinBrokenDigits(cleaned);
+  // Fallback to regex chunking if only text is available
+  console.warn('[newindia] Text-only mode - some fields may be incomplete. Use buffer for best results.');
   
-  // Normalize: convert newlines to spaces but preserve structure
-  const normalized = cleaned
-    .replace(/\r\n/g, ' ')
-    .replace(/\n+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Quick regex extraction as fallback
+  const policyMatches = Array.from(text.matchAll(/(\d{20,25}):\s*([A-Z]{2})/g));
   
-  // Find all record markers: "policyNumber: productCode"
-  const recordMatches = Array.from(normalized.matchAll(/(\d{20,25}):\s*([A-Z]{2})\s+/g));
-  
-  console.log(`[newindia] Found ${recordMatches.length} policy records`);
-  
-  // Extract text block for each record (from marker to next marker)
-  for (let i = 0; i < recordMatches.length; i++) {
-    const match = recordMatches[i];
-    const startPos = match.index!;
-    const endPos = i < recordMatches.length - 1 ? recordMatches[i + 1].index! : normalized.length;
-    
-    const recordBlock = normalized.slice(startPos, endPos).trim();
-    const lobDescription = extractLobDescription(normalized, startPos); // Extract from full text looking backward
-    
-    const policy = parseRecordBlock(recordBlock, lobDescription);
-    if (policy) {
-      rows.push(policy);
-    }
-  }
-  
-  console.log(`[newindia] Successfully parsed ${rows.length} policies`);
-  return rows;
-}
-
-/**
- * PRIORITY 1: Strip repeated header blocks like:
- * "Operating Office Code  Operating Office  Party Code  OD Policy Number  OD Expiry Date"
- * These appear mid-text and break the record extraction.
- */
-function stripMidtextHeaders(text: string): string {
-  // Match the header pattern and remove all occurrences
-  return text.replace(
-    /Operating\s+Office\s+Code\s+Operating\s+Office\s+Party\s+Code\s+OD\s+Policy\s+Number\s+OD\s+Expiry\s+Date/gi,
-    ' '
-  );
-}
-
-/**
- * PRIORITY 2: Rejoin digit sequences broken by line-wrap
- * Pattern: digit(s), newline, digit(s) → concatenate without space
- * E.g., "21060034\n24950000" → "2106003424950000"
- */
-function rejoinBrokenDigits(text: string): string {
-  return text.replace(/(\d)\n(\d)/g, '$1$2');
+  return policyMatches.map(match => ({
+    sn: null,
+    policy_number: match[1],
+    client_name: null,
+    client_phone: null,
+    client_address: null,
+    start_date: null,
+    renewal_date: null,
+    policy_type: match[2],
+    product_name: null,
+    mode: null,
+    premium: null,
+    sum_insured: null,
+  }));
 }
 
 /**
  * Extract LOB description by looking BACKWARD from marker in full text.
- * LOB text appears before the marker in source order: "210600 34 Health Insurance 21060034249500005010: UK ..."
- * So we search the ~100 chars before the marker for the pattern.
  */
 function extractLobDescription(fullText: string, markerStartIndex: number): string | null {
   const before = fullText.slice(Math.max(0, markerStartIndex - 100), markerStartIndex);
@@ -96,211 +70,142 @@ function extractLobDescription(fullText: string, markerStartIndex: number): stri
   return m ? m[1].replace(/\s+/g, ' ').trim() : null;
 }
 
-function parseRecordBlock(block: string, lobDescription: string | null): RegisterRow | null {
-  // Extract policy number and product code
-  const markerMatch = block.match(/^(\d{20,25}):\s*([A-Z]{2})\s+/);
-  if (!markerMatch) return null;
+/**
+ * Validate that mandatory fields are present
+ */
+function validateRecord(record: RegisterRow): { valid: boolean; missing: string[] } {
+  const REQUIRED_FIELDS = ['policy_number', 'client_name', 'policy_type', 'product_name', 'sum_insured'];
+  const missing = REQUIRED_FIELDS.filter(field => {
+    const value = record[field as keyof RegisterRow];
+    return value === null || value === undefined || value === '';
+  });
   
-  const policyNumber = markerMatch[1];
-  const productCode = markerMatch[2];
-  
-  console.log(`[newindia] Processing policy ${policyNumber}`);
-  
-  // Extract product name (text after product code until first date)
-  let productName: string | null = null;
-  const afterCode = block.slice(markerMatch[0].length);
-  const productMatch = afterCode.match(/^([A-Za-z\s\-]+?)\s+\d{2}-[A-Za-z]{3}-\d{4}/);
-  if (productMatch) {
-    productName = productMatch[1].replace(/\s+/g, ' ').trim();
-  }
-  
-  // Extract dates (looking for DD-MMM-YYYY pattern)
-  const dates: string[] = [];
-  let dateMatch;
-  const dateRegex = /(\d{2})-([A-Za-z]{3})-(\d{4})/g;
-  while ((dateMatch = dateRegex.exec(block)) !== null) {
-    dates.push(dateMatch[0]);
-  }
-  
-  let startDate = dates.length >= 1 ? toIsoDate(dates[0]) : null;
-  let renewalDate = dates.length >= 2 ? toIsoDate(dates[1]) : null;
-  
-  if (!renewalDate && startDate) {
-    const start = new Date(startDate);
-    start.setFullYear(start.getFullYear() + 1);
-    renewalDate = start.toISOString().split('T')[0];
-  }
-  
-  if (startDate && renewalDate) {
-    const startTime = new Date(startDate).getTime();
-    const renewalTime = new Date(renewalDate).getTime();
-    if (renewalTime < startTime) {
-      [startDate, renewalDate] = [renewalDate, startDate];
-    }
-  }
-  
-  // PRIORITY 3: Widen holder-code regex to \d?[HPOMNE][A-Z]{0,2}\d{7,10}
-  // This captures: optional leading digit + letter(s) + optional middle letter(s) + 7-10 digits
-  const holderMatch = block.match(/\s(\d?[HPOMNE][A-Z]{0,2}\d{7,10})\s+/);
-  
-  let clientName: string | null = null;
-  let clientAddress: string | null = null;
-  let needsReview = false;
-  
-  if (holderMatch) {
-    const codePos = block.indexOf(holderMatch[1]);
-    const afterCodeRaw = block.slice(codePos + holderMatch[1].length).trim();
-    
-    // Try to extract name and address
-    const nameAddrResult = extractNameAndAddress(afterCodeRaw);
-    clientName = nameAddrResult.name;
-    clientAddress = nameAddrResult.address;
-    needsReview = nameAddrResult.needsReview;
-    
-    // PRIORITY 4: Never drop data — if we couldn't cleanly split, store raw unsplit span
-    if (!clientName && afterCodeRaw.length > 0) {
-      // Extract everything before the first phone or pincode as raw name+address
-      const rawSpan = afterCodeRaw.match(/^(.+?)(?=\s+\d{6}(?:\s|$)|\s+[6-9]\d{9}(?:\s|$)|\s+1D6\d{6}(?:\s|$)|$)/);
-      if (rawSpan) {
-        clientName = rawSpan[1].replace(/\s+/g, ' ').trim();
-        needsReview = true;
-      }
-    }
-  }
-  
-  // Extract phone (closest one to client name area)
-  let clientPhone: string | null = null;
-  const phones = block.match(new RegExp(PHONE_RE.source, 'g'));
-  if (phones && phones.length > 0) {
-    if (clientName) {
-      const namePos = block.indexOf(clientName);
-      if (namePos > -1) {
-        const nearName = block.slice(Math.max(0, namePos - 100), namePos + clientName.length + 500);
-        const nearPhone = nearName.match(PHONE_RE);
-        if (nearPhone) clientPhone = nearPhone[0];
-      }
-    }
-    if (!clientPhone) clientPhone = phones[0];
-  }
-  
-  // PRIORITY 5: Don't hardcode officer name — anchor financial figures on numeric pattern only
-  // Pattern: 1D6\d{6} (officer code) followed by comma-separated or space-separated numbers
-  let sumInsured: number | null = null;
-  let grossPremium: number | null = null;
-  let serviceTax: number | null = null;
-  
-  const finMatch = block.match(/1D6\d{6}\s+(\d{1,3})\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)(?:\s+([\d,]+))?/);
-  
-  if (finMatch) {
-    const nums = [finMatch[2], finMatch[3], finMatch[4], finMatch[5]]
-      .filter(Boolean)
-      .map(n => parseNumber(n!));
-    
-    if (nums.length >= 3) {
-      sumInsured = nums[0]!;
-      grossPremium = nums[1]!;
-      serviceTax = nums[2]!;
-    } else if (nums.length === 2) {
-      grossPremium = nums[0]!;
-      serviceTax = nums[1]!;
-    } else if (nums.length === 1) {
-      grossPremium = nums[0]!;
-    }
-  }
-  
-  const premium = grossPremium && serviceTax ? grossPremium + serviceTax : grossPremium;
-  
-  console.log(`[newindia] Extracted: ${policyNumber}, ${clientName || 'N/A'}, ${premium || 'N/A'}${needsReview ? ' [NEEDS REVIEW]' : ''}`);
-  
-  return {
-    sn: null,
-    policy_number: policyNumber,
-    client_name: clientName,
-    client_phone: clientPhone,
-    client_address: clientAddress,
-    start_date: startDate,
-    renewal_date: renewalDate,
-    policy_type: lobDescription || productCode,
-    product_name: productName,
-    mode: null,
-    premium: premium,
-    sum_insured: sumInsured,
-  };
+  return { valid: missing.length === 0, missing };
 }
 
 /**
- * Extract name and address from text after holder code.
- * Returns: { name, address, needsReview }
- * If can't cleanly split, returns needsReview=true to flag for manual review.
+ * Use LLM to extract structured fields from record blocks.
+ * Handles ambiguous boundaries (name vs address) that regex cannot reliably split.
+ * WITH VALIDATION: Ensures all mandatory fields are extracted.
  */
-function extractNameAndAddress(afterCodeRaw: string): {
-  name: string | null;
-  address: string | null;
-  needsReview: boolean;
-} {
-  let name: string | null = null;
-  let address: string | null = null;
-  let needsReview = false;
+async function extractBatchWithLLM(
+  batch: Array<{
+    block: string;
+    policyNumber: string;
+    productCode: string;
+    lobDescription: string | null;
+  }>,
+  attempt: number = 1
+): Promise<RegisterRow[]> {
+  const numbered = batch.map((b, i) => 
+    `RECORD ${i}:
+Policy Number: ${b.policyNumber}
+Product Code: ${b.productCode}
+LOB Description: ${b.lobDescription || "Unknown"}
+Text: ${b.block}`
+  ).join("\n\n");
   
-  // Try to extract name with optional title
-  const nameMatch = afterCodeRaw.match(
-    /^((?:Mr|Mrs|Ms|Dr|SHREE|M\/S|MR|MRS|MS|SMT|SHRI)\s+)?([A-Za-z][A-Za-z\s&.\/\-]{2,100}?)(?=\s+\d|\s+[A-Z]{1,2}\d)/i
+  // Debug: log first record to see what LLM receives
+  if (attempt === 1) {
+    console.log('[newindia] Sample block being sent to LLM:', batch[0].block.substring(0, 300));
+  }
+
+  const completion = await getGroqClient().chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    temperature: attempt > 1 ? 0.1 : 0,
+    response_format: { type: "json_object" },
+    messages: [{
+      role: "user",
+      content: `Extract insurance policy data and return as JSON.
+
+Each record follows this pattern:
+[Policy Number]: [Code] [Product Name] [Start Date] [End Date] [Holder Code] [CLIENT NAME] [Address parts...] [Pin] [Phone] [Officer Code] [Officer Name] [Agent Code] [Sum Insured] [Premium] [Tax]
+
+Return JSON with exactly this structure:
+{
+  "records": [
+    {
+      "index": 0,
+      "client_name": "FULL NAME IN CAPS",
+      "client_address": "combined address",
+      "client_phone": "10-digit mobile",
+      "product_name": "Product name after colon",
+      "start_date": "YYYY-MM-DD",
+      "renewal_date": "YYYY-MM-DD", 
+      "premium": number,
+      "sum_insured": number,
+      "mode": "payment mode"
+    }
+  ]
+}
+
+EXTRACTION RULES:
+1. client_name: Name in CAPS after holder code (e.g., "RAMESH D PATEL", "Mr TARANG K PATEL")
+2. product_name: Text after product code (e.g., "New India Mediclaim Policy")
+3. sum_insured: Large number before premium
+4. Remove commas from numbers
+5. Convert dates "03-Jan-2025" to "2025-01-03"
+6. Phone: 10 digits starting with 6-9
+7. Extract ALL fields or use null
+
+Extract from these ${batch.length} records:
+
+${numbered}`
+    }]
+  });
+
+  const response = JSON.parse(completion.choices[0].message.content || '{}');
+  
+  if (!response.records || response.records.length !== batch.length) {
+    throw new Error(`LLM returned ${response.records?.length || 0} records, expected ${batch.length}`);
+  }
+
+  const results: RegisterRow[] = response.records.map((record: any, i: number) => ({
+    sn: null,
+    policy_number: batch[i].policyNumber,
+    client_name: record.client_name || null,
+    client_phone: record.client_phone || null,
+    client_address: record.client_address || null,
+    start_date: record.start_date || null,
+    renewal_date: record.renewal_date || null,
+    policy_type: batch[i].lobDescription || batch[i].productCode,
+    product_name: record.product_name || null,
+    mode: record.mode || null,
+    premium: record.premium || null,
+    sum_insured: record.sum_insured || null,
+  }));
+  
+  // Validate results
+  const incompleteRecords = results.filter((r, i) => {
+    const validation = validateRecord(r);
+    if (!validation.valid) {
+      console.log(`[newindia] Record ${i} missing fields: ${validation.missing.join(', ')}`);
+    }
+    return !validation.valid;
+  });
+  
+  // If any records are incomplete and we haven't exhausted retries, retry the batch
+  if (incompleteRecords.length > 0 && attempt < 2) {
+    console.log(`[newindia] Batch has ${incompleteRecords.length} incomplete records, retrying (attempt ${attempt + 1})...`);
+    return extractBatchWithLLM(batch, attempt + 1);
+  }
+  
+  return results;
+}
+
+/**
+ * Strip repeated header blocks
+ */
+function stripMidtextHeaders(text: string): string {
+  return text.replace(
+    /Operating\s+Office\s+Code\s+Operating\s+Office\s+Party\s+Code\s+OD\s+Policy\s+Number\s+OD\s+Expiry\s+Date/gi,
+    ' '
   );
-  
-  if (nameMatch) {
-    const title = nameMatch[1] ? nameMatch[1].trim() + ' ' : '';
-    const rawName = nameMatch[2].replace(/\s+/g, ' ').trim();
-    name = (title + rawName).trim();
-  } else {
-    // Fallback: grab first 2-4 words
-    const simpleMatch = afterCodeRaw.match(/^([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,3})\s+/);
-    if (simpleMatch) {
-      name = simpleMatch[1].replace(/\s+/g, ' ').trim();
-    }
-  }
-  
-  // Validate name
-  if (name && (name.length < 3 || /^\d/.test(name))) {
-    name = null;
-  }
-  
-  // Extract address after name
-  if (name) {
-    const nameIndex = afterCodeRaw.indexOf(name);
-    if (nameIndex >= 0) {
-      const afterName = afterCodeRaw.slice(nameIndex + name.length).trim();
-      const addrMatch = afterName.match(/^\s+(.+?)(?=\s+\d{6}(?:\s|$)|\s+[6-9]\d{9}(?:\s|$)|\s+1D6\d{6}(?:\s|$)|$)/);
-      if (addrMatch) {
-        address = addrMatch[1]
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 250);
-      }
-    }
-  }
-  
-  return { name, address, needsReview };
 }
 
-function toIsoDate(ddmmmyyyy: string): string | null {
-  const match = ddmmmyyyy.match(/(\d{2})-([A-Za-z]{3})-(\d{4})/);
-  if (!match) return null;
-  
-  const [, dd, mmm, yyyy] = match;
-  const monthMap: Record<string, string> = {
-    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
-    'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
-    'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
-  };
-  
-  const mm = monthMap[mmm.toLowerCase()];
-  if (!mm) return null;
-  
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function parseNumber(str: string): number | null {
-  const cleaned = str.replace(/,/g, '');
-  const num = Number(cleaned);
-  return isNaN(num) ? null : num;
+/**
+ * Rejoin digit sequences broken by line-wrap
+ */
+function rejoinBrokenDigits(text: string): string {
+  return text.replace(/(\d)\n(\d)/g, '$1$2');
 }

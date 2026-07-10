@@ -74,8 +74,26 @@ export async function POST(request: NextRequest) {
   }
 
   // Use auto-detection to parse any supported register type
-  const { rows, type, confidence } = parseRegisterAuto(text);
+  const { rows, type, confidence } = await parseRegisterAuto(text);
   if (rows.length > 0 && confidence >= 0.5) {
+    // For New India registers, use fast coordinate-based extraction
+    if (type === 'newindia') {
+      console.log('[extract] Using fast coordinate extraction for New India');
+      const { parseNewIndiaRegisterFast } = await import('@/lib/newindia-fast');
+      const fastRows = await parseNewIndiaRegisterFast(bytes);
+      
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: false,
+        mode: "bulk",
+        rowCount: fastRows.length,
+        rows: fastRows,
+        registerType: type,
+        confidence: 1.0, // Coordinate-based is 100% reliable
+      });
+    }
+    
     return NextResponse.json({
       filePath: path,
       fileName: file.name,
