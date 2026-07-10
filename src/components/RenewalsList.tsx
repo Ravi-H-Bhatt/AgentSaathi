@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, X, Copy, Check, Send, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
+import { X, Copy, Check, Send, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
 import { shortDate, daysUntil, money, getAdjustedRenewalDate } from "@/lib/format";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -238,19 +238,11 @@ export function RenewalsList({
                   <>
                     <button
                       onClick={() => setConfirmRenewId(item.id)}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-600 text-green-600 hover:bg-green-600 hover:text-white transition-all duration-200"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
                       title="Mark policy as renewed"
                     >
                       <CheckCircle2 size={13} />
                       <span className="hidden sm:inline">Renewed</span>
-                    </button>
-                    <button
-                      onClick={() => { setSelected(item); setSendResult(null); }}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
-                      title="Draft & send renewal email"
-                    >
-                      <Mail size={13} />
-                      <span className="hidden sm:inline">Email</span>
                     </button>
                     {/* WhatsApp shows ONLY when the client has a valid mobile */}
                     {waLink && (

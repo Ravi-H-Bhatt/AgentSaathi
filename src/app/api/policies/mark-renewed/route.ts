@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentAgent } from "@/lib/auth";
+import { ownerIdFor } from "@/lib/team";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -22,13 +23,14 @@ export async function POST(req: NextRequest) {
     }
 
     const db = createAdminClient();
+    const ownerId = ownerIdFor(agent);
 
-    // First, verify the policy belongs to this agent
+    // First, verify the policy belongs to this owner (fetch raw_extract too).
     const { data: policy, error: fetchError } = await db
       .from("policies")
-      .select("id, renewal_date")
+      .select("id, renewal_date, raw_extract")
       .eq("id", policyId)
-      .eq("agent_id", agent.id)
+      .eq("agent_id", ownerId)
       .single();
 
     if (fetchError || !policy) {
@@ -49,16 +51,18 @@ export async function POST(req: NextRequest) {
       newRenewalDate = nextYear.toISOString().split('T')[0];
     }
 
-    // Update the policy with new renewal date
+    // Store the "renewed" marker INSIDE the existing raw_extract jsonb column
+    // (no schema change needed). This makes the policy drop off the renewals
+    // list for this cycle. It naturally returns next year.
+    const existingRaw =
+      (policy.raw_extract as Record<string, unknown> | null) || {};
+    const newRaw = { ...existingRaw, renewed_at: new Date().toISOString() };
+
     const { error: updateError } = await db
       .from("policies")
-      .update({
-        renewal_date: newRenewalDate,
-        // Optionally update status if needed
-        // status: "renewed"
-      })
+      .update({ renewal_date: newRenewalDate, raw_extract: newRaw })
       .eq("id", policyId)
-      .eq("agent_id", agent.id);
+      .eq("agent_id", ownerId);
 
     if (updateError) {
       console.error("Error updating policy:", updateError);

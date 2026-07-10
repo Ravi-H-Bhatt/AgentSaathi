@@ -29,7 +29,20 @@ export default async function DashboardPage() {
   // follow-up) plus everything renewing in the next 30 days. Uses recurring
   // dd/mm logic, so a policy stored with a future year still surfaces when its
   // day-and-month falls within the window. Sorted most-overdue first.
+  // Policies marked "renewed" recently (this cycle) are hidden.
+  const nowMs = Date.now();
+  const RENEWED_HIDE_MS = 330 * 24 * 60 * 60 * 1000; // hide for ~this cycle
   const renewalsThisMonth = policies
+    .filter((p) => {
+      // Hide if marked renewed within the current cycle (~330 days).
+      // The marker lives in raw_extract.renewed_at (no schema change needed).
+      const renewedAt = (p.raw_extract as { renewed_at?: string } | null)?.renewed_at;
+      if (renewedAt) {
+        const t = new Date(renewedAt).getTime();
+        if (!isNaN(t) && nowMs - t < RENEWED_HIDE_MS) return false;
+      }
+      return true;
+    })
     .map((p) => ({ p, d: daysUntil(p.renewal_date) }))
     .filter(({ d }) => d != null && d >= -5 && d <= 30)
     .sort((a, b) => (a.d as number) - (b.d as number))
