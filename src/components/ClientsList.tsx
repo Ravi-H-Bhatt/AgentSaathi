@@ -10,6 +10,7 @@ interface Row {
   full_name: string;
   email: string | null;
   phone: string | null;
+  address: string | null;
   policyCount: number;
   policyNumbers: string[];
 }
@@ -25,7 +26,8 @@ export function ClientsList({ clients }: { clients: Row[] }) {
         c.full_name.toLowerCase().includes(term) ||
         c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
         (c.email || "").toLowerCase().includes(term) ||
-        (c.phone || "").toLowerCase().includes(term)
+        (c.phone || "").toLowerCase().includes(term) ||
+        (c.address || "").toLowerCase().includes(term)
     );
   }, [q, clients]);
 
@@ -50,7 +52,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, policy number, phone, or email…"
+          placeholder="Search by name, policy number, address, phone, or email…"
           className="w-full rounded-xl border border-border bg-card pl-11 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/10"
         />
       </div>
@@ -90,6 +92,11 @@ export function ClientsList({ clients }: { clients: Row[] }) {
                             {c.policyCount} {c.policyCount === 1 ? "policy" : "policies"}
                             {c.email ? ` · ${c.email}` : c.phone ? ` · ${c.phone}` : ""}
                           </p>
+                          {c.address && (
+                            <p className="text-xs text-muted truncate mt-0.5">
+                              📍 {c.address}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <ChevronRight

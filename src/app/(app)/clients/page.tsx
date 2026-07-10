@@ -12,16 +12,22 @@ export default async function ClientsPage() {
   if (!permissionsFor(agent).clients) redirect("/dashboard");
   const clientsWithPolicies = await getAllClientsWithPolicies(ownerIdFor(agent));
 
-  const data = clientsWithPolicies.map((c) => ({
-    id: c.id,
-    full_name: c.full_name,
-    email: c.email,
-    phone: c.phone,
-    policyCount: c.policies.length,
-    policyNumbers: c.policies
-      .map((p) => p.policy_number)
-      .filter((n): n is string => !!n),
-  }));
+  const data = clientsWithPolicies.map((c) => {
+    // Get most recent address from policies (first policy has most recent renewal_date due to ordering)
+    const mostRecentAddress = c.policies.find(p => p.client_address)?.client_address || null;
+    
+    return {
+      id: c.id,
+      full_name: c.full_name,
+      email: c.email,
+      phone: c.phone,
+      address: mostRecentAddress,
+      policyCount: c.policies.length,
+      policyNumbers: c.policies
+        .map((p) => p.policy_number)
+        .filter((n): n is string => !!n),
+    };
+  });
 
   return (
     <div className="space-y-6">
