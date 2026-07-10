@@ -47,14 +47,14 @@ async function extractWithCoordinates(buffer: Buffer): Promise<PDFItem[]> {
     const textContent = await page.getTextContent();
     
     const pageHeight = page.view[3];
-    const yOffset = (pageNum - 1) * (pageHeight + 100);
     
     textContent.items.forEach((item: any) => {
       if (item.str.trim()) {
         allItems.push({
           str: item.str.trim(),
           x: Math.round(item.transform[4]),
-          y: Math.round(item.transform[5]) + yOffset,
+          // Use inverted Y so higher position = higher value
+          y: Math.round(pageHeight - item.transform[5]) + (pageNum - 1) * 10000,
         });
       }
     });
@@ -78,7 +78,7 @@ function findRecordStarts(items: PDFItem[]): number[] {
     }
   });
   
-  return recordYs.sort((a, b) => b - a); // Descending
+  return recordYs.sort((a, b) => a - b); // Ascending - top to bottom order
 }
 
 /**
@@ -109,13 +109,13 @@ function extractColumn(
   
   const filtered = items
     .filter(item =>
-      item.y >= yEnd &&
-      item.y <= yStart &&
+      item.y >= yStart &&
+      item.y <= yEnd &&
       item.x >= xMin &&
       item.x < xMax &&
       !isHeaderText(item.str)
     )
-    .sort((a, b) => b.y - a.y || a.x - b.x);
+    .sort((a, b) => a.y - b.y || a.x - b.x);
   
   return filtered
     .map(item => item.str)
@@ -168,11 +168,11 @@ function extractRecord(
   const toDateRaw = extractColumn(items, EREGISTER_COLUMNS.to_date, yStart, yEnd);
   const totalPremiumRaw = extractColumn(items, EREGISTER_COLUMNS.total_premium, yStart, yEnd);
   
-  // Must have at least client name
-  if (!clientNameRaw) return null;
-  
-  // Clean data
-  let clientName = clientNameRaw.trim();
+  // Clean client name - reject if empty or missing
+  const clientName = clientNameRaw.trim();
+  if (!clientName) {
+    return null; // Skip rows without client name
+  }
   let policyType = policyTypeRaw.trim() || null;
   let insCo = insCoRaw.trim() || null;
   
@@ -282,7 +282,7 @@ export async function parseERegister(buffer: Buffer): Promise<RegisterRow[]> {
   
   for (let i = 0; i < recordYs.length; i++) {
     const yStart = recordYs[i];
-    const yEnd = i + 1 < recordYs.length ? recordYs[i + 1] + 5 : 0;
+    const yEnd = i + 1 < recordYs.length ? recordYs[i + 1] - 5 : Infinity;
     
     const record = extractRecord(items, yStart, yEnd);
     if (record) {
