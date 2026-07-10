@@ -2,6 +2,19 @@
 -- RUN THIS SQL IN SUPABASE DASHBOARD → SQL EDITOR
 -- ============================================================
 
+-- 🔧 Maintenance / "Work in Progress" mode toggle (single-row settings table)
+create table if not exists public.app_settings (
+  id boolean primary key default true,
+  maintenance_mode boolean not null default false,
+  maintenance_message text,
+  updated_at timestamptz not null default now(),
+  constraint app_settings_singleton check (id)
+);
+insert into public.app_settings (id, maintenance_mode)
+values (true, false)
+on conflict (id) do nothing;
+
+
 -- ⚠️ URGENT FIX: Drop the unique constraint that blocks re-upload.
 -- The app now deduplicates using a COMPOSITE key (policy_number + client
 -- + product + premium + dates), so the same policy_number can legitimately

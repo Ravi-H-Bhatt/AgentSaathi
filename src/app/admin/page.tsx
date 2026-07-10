@@ -1,7 +1,11 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { shortDate } from "@/lib/format";
+import { getMaintenance } from "@/lib/settings";
 import { AgentRow } from "@/components/AgentRow";
+import { MaintenanceToggle } from "@/components/MaintenanceToggle";
 import type { Agent } from "@/lib/types";
+
+export const dynamic = "force-dynamic";
 
 export default async function AdminAgentsPage() {
   const db = createAdminClient();
@@ -15,6 +19,13 @@ export default async function AdminAgentsPage() {
   const pending = agents.filter((a) => a.status === "pending");
   const others = agents.filter((a) => a.status !== "pending");
 
+  let maintenance = { active: false, message: null as string | null };
+  try {
+    maintenance = await getMaintenance();
+  } catch {
+    /* settings table may not exist yet */
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -23,6 +34,11 @@ export default async function AdminAgentsPage() {
           Approve agents before they can access the dashboard.
         </p>
       </div>
+
+      <MaintenanceToggle
+        initialActive={maintenance.active}
+        initialMessage={maintenance.message}
+      />
 
       <section>
         <h2 className="font-semibold mb-3">

@@ -3,7 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { setMaintenance } from "@/lib/settings";
 import type { AgentStatus } from "@/lib/types";
+
+/** Admin-only: toggle global maintenance ("work in progress") mode. */
+export async function toggleMaintenance(active: boolean, message?: string) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") throw new Error("Forbidden");
+  await setMaintenance(active, message ?? null);
+  revalidatePath("/admin");
+}
 
 /** Admin-only: set an agent's approval status. */
 export async function setAgentStatus(agentId: string, status: AgentStatus) {
