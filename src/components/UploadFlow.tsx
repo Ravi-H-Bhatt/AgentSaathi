@@ -405,7 +405,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                 <tr className="sticky top-0 bg-card border-b border-border text-left text-xs text-muted uppercase tracking-wide">
                   <th className="px-3 py-3 font-semibold w-28">Policy No.</th>
                   <th className="px-3 py-3 font-semibold min-w-[160px]">Name</th>
-                  <th className="px-3 py-3 font-semibold w-24">Plan</th>
+                  <th className="px-3 py-3 font-semibold min-w-[180px]">Product</th>
                   <th className="px-3 py-3 font-semibold w-14">Mode</th>
                   <th className="px-3 py-3 font-semibold text-right w-24">Premium</th>
                   <th className="px-3 py-3 font-semibold text-right w-24">Sum Ass.</th>
@@ -424,7 +424,12 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                     <td className="px-3 py-2.5 font-medium">
                       {r.client_name || <span className="text-amber-500 text-xs">No name</span>}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-muted">{r.policy_type || "—"}</td>
+                    <td className="px-3 py-2.5 text-xs">
+                      <div className="font-medium">{r.product_name || r.policy_type || "—"}</div>
+                      {r.product_name && r.policy_type && (
+                        <div className="text-muted text-[10px] mt-0.5">{r.policy_type}</div>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5">
                       {r.mode ? (
                         <span className="inline-block text-xs font-medium px-1.5 py-0.5 rounded bg-black/[.06]">
