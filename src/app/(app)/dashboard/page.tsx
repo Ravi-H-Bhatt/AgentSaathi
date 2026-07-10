@@ -25,14 +25,13 @@ export default async function DashboardPage() {
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
 
-  // Renewals list uses the CANONICAL recurring-renewal logic (daysUntil):
-  //   - annual recurrence: same dd/mm rolls to next year once >7 days past
-  //   - a date that passed up to 7 days ago shows as OVERDUE (still in the list)
-  //   - include anything from OVERDUE(-7) up to 30 days ahead
-  //   - sort by urgency: most overdue first, then soonest upcoming
+  // "Renewals needing attention": anything OVERDUE (up to 45 days back, for
+  // follow-up) plus everything renewing in the next 30 days. Uses the ACTUAL
+  // stored date — future-dated policies (e.g. renewing in 2027) are far off and
+  // correctly excluded. Sorted by urgency: most overdue first, then soonest.
   const renewalsThisMonth = policies
     .map((p) => ({ p, d: daysUntil(p.renewal_date) }))
-    .filter(({ d }) => d != null && d >= -7 && d <= 30)
+    .filter(({ d }) => d != null && d >= -45 && d <= 30)
     .sort((a, b) => (a.d as number) - (b.d as number))
     .map(({ p }) => p);
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);
@@ -101,6 +100,7 @@ export default async function DashboardPage() {
                   clientId: p.client_id,
                   clientName: c?.full_name || "Unknown client",
                   clientEmail: c?.email || null,
+                  clientPhone: c?.phone || null,
                   policyType: p.policy_type,
                   company: p.company,
                   policyNumber: p.policy_number,

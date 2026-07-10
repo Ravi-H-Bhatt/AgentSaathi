@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, X, Copy, Check, Send, Loader2, CheckCircle2 } from "lucide-react";
+import { Mail, X, Copy, Check, Send, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
 import { shortDate, daysUntil, money, getAdjustedRenewalDate } from "@/lib/format";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -12,6 +12,7 @@ export interface RenewalItem {
   clientId: string;
   clientName: string;
   clientEmail: string | null;
+  clientPhone: string | null;
   policyType: string | null;
   company: string | null;
   policyNumber: string | null;
@@ -19,6 +20,57 @@ export interface RenewalItem {
   premium: number | null;
   renewalDate: string | null;
   mode: string | null;
+}
+
+/**
+ * Extract a VALID 10-digit Indian mobile from a raw field.
+ * Rejects policy numbers, landlines, and anything that isn't a real mobile.
+ * Returns the 10-digit number (no country code) or null.
+ */
+function validMobile10(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let digits = raw.replace(/\D/g, "");
+  // Strip a leading country code / trunk prefix if present.
+  if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+  else if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+  // Must be EXACTLY 10 digits and start with 6-9 (Indian mobile series).
+  if (/^[6-9]\d{9}$/.test(digits)) return digits;
+  return null;
+}
+
+/** Build a wa.me link (opens the agent's own WhatsApp with a pre-filled note). */
+function buildWhatsAppLink(item: RenewalItem, agentName?: string): string | null {
+  const mobile = validMobile10(item.clientPhone);
+  if (!mobile) return null;
+  const digits = "91" + mobile; // India country code
+
+  const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
+  const date = adjustedDate
+    ? shortDate(adjustedDate)
+    : item.renewalDate
+    ? shortDate(item.renewalDate)
+    : "soon";
+
+  const lines = [
+    `Dear ${item.clientName},`,
+    "",
+    `This is a friendly reminder that your policy is due for renewal on ${date}.`,
+    "",
+    "*Policy Details*",
+    `• Plan: ${item.policyType || "—"}`,
+    item.company ? `• Company: ${item.company}` : "",
+    item.policyNumber ? `• Policy No: ${item.policyNumber}` : "",
+    item.sumInsured ? `• Sum Insured: ${money(item.sumInsured)}` : "",
+    item.premium ? `• Premium: ${money(item.premium)}${item.mode ? ` (${item.mode})` : ""}` : "",
+    `• Renewal Date: ${date}`,
+    "",
+    "Please renew on time to keep your coverage active. Feel free to reach out for any assistance. 🙏",
+    "",
+    "Regards,",
+    agentName || "Your Insurance Agent",
+  ].filter((l) => l !== "");
+
+  return `https://wa.me/${digits}?text=${encodeURIComponent(lines.join("\n"))}`;
 }
 
 function buildEmailDraft(item: RenewalItem, agentName?: string): { subject: string; body: string } {
@@ -121,6 +173,7 @@ export function RenewalsList({
           const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
           const isConfirming = confirmRenewId === item.id;
           const isProcessing = renewingId === item.id;
+          const waLink = buildWhatsAppLink(item, agentName);
           
           return (
             <li key={item.id} className="flex items-center justify-between px-5 py-4 gap-3 hover:bg-black/[.02] transition-colors">
@@ -199,6 +252,19 @@ export function RenewalsList({
                       <Mail size={13} />
                       <span className="hidden sm:inline">Email</span>
                     </button>
+                    {/* WhatsApp shows ONLY when the client has a valid mobile */}
+                    {waLink && (
+                      <a
+                        href={waLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
+                        title={`Send WhatsApp reminder to ${item.clientPhone}`}
+                      >
+                        <MessageCircle size={13} />
+                        <span className="hidden sm:inline">WhatsApp</span>
+                      </a>
+                    )}
                   </>
                 )}
               </div>
