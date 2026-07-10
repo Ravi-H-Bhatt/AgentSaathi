@@ -57,33 +57,98 @@ export async function POST(request: NextRequest) {
   const valid = rows.filter((r) => cleanName(r.client_name));
   const skippedNoName = rows.length - valid.length;
 
-  // ---- 1. Dedup against existing policies (by policy_number, if present). ----
-  const incomingNumbers = [...new Set(valid.filter(r => r.policy_number).map((r) => r.policy_number!))];
-  const existingNumbers = new Set<string>();
-  // Chunk the IN() lookup to avoid oversized queries.
-  for (let i = 0; i < incomingNumbers.length; i += 500) {
-    const chunk = incomingNumbers.slice(i, i + 500);
-    if (chunk.length === 0) continue;
-    const { data } = await db
-      .from("policies")
-      .select("policy_number")
-      .eq("agent_id", ownerId)
-      .in("policy_number", chunk);
-    for (const p of (data as { policy_number: string | null }[]) || []) {
-      if (p.policy_number) existingNumbers.add(p.policy_number);
+  // Load existing clients up front so we can resolve client_id → name.
+  const clientIdByKey = new Map<string, string>();
+  const clientNameById = new Map<string, string>();
+  {
+    const { data: existingClients } = await db
+      .from("clients")
+      .select("id, full_name")
+      .eq("agent_id", ownerId);
+    for (const c of (existingClients as { id: string; full_name: string }[]) || []) {
+      const key = nameKey(c.full_name);
+      if (!clientIdByKey.has(key)) clientIdByKey.set(key, c.id);
+      clientNameById.set(c.id, c.full_name);
     }
   }
 
-  // Dedup within the upload itself (same policy number twice in the file).
-  // For rows without policy_number, we'll allow them all through.
+  // Build a COMPOSITE dedup key from ALL identifying fields (including client name).
+  // A row is a duplicate ONLY if EVERY field matches exactly. This means:
+  //   - Same policy# but different premium/date/product => DIFFERENT policy (kept)
+  //   - Truly identical rows => skipped
+  // Re-uploading the same PDF adds anything not already stored exactly.
+  const rowKey = (
+    clientName: string,
+    policyNumber: string | null,
+    productName: string | null,
+    policyType: string | null,
+    premium: number | null,
+    sumInsured: number | null,
+    startDate: string | null,
+    renewalDate: string | null
+  ): string =>
+    [
+      (policyNumber || "").trim().toLowerCase(),
+      nameKey(clientName),
+      (productName || "").trim().toLowerCase(),
+      (policyType || "").trim().toLowerCase(),
+      premium ?? "",
+      sumInsured ?? "",
+      startDate || "",
+      renewalDate || "",
+    ].join("|");
+
+  // ---- 1. Build set of existing policy keys (paginated over ALL policies). ----
+  const existingKeys = new Set<string>();
+  {
+    let from = 0;
+    const pageSize = 1000;
+    for (;;) {
+      const { data } = await db
+        .from("policies")
+        .select(
+          "policy_number, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id"
+        )
+        .eq("agent_id", ownerId)
+        .range(from, from + pageSize - 1);
+      const batch = (data as any[]) || [];
+      if (batch.length === 0) break;
+      for (const p of batch) {
+        const cname = clientNameById.get(p.client_id) || "";
+        existingKeys.add(
+          rowKey(
+            cname,
+            p.policy_number,
+            p.product_name,
+            p.policy_type,
+            p.premium,
+            p.sum_insured,
+            p.start_date,
+            p.renewal_date
+          )
+        );
+      }
+      if (batch.length < pageSize) break;
+      from += pageSize;
+    }
+  }
+
+  // ---- 2. Filter incoming rows: keep only those NOT already in DB and not
+  //         exact duplicates within this same upload. ----
   const seenInFile = new Set<string>();
   const toImport = valid.filter((r) => {
-    // If no policy number, allow it (can't dedup without identifier)
-    if (!r.policy_number) return true;
-    
-    const num = r.policy_number;
-    if (existingNumbers.has(num) || seenInFile.has(num)) return false;
-    seenInFile.add(num);
+    const key = rowKey(
+      r.client_name!,
+      r.policy_number,
+      r.product_name,
+      r.policy_type,
+      r.premium,
+      r.sum_insured,
+      r.start_date,
+      r.renewal_date
+    );
+    if (existingKeys.has(key) || seenInFile.has(key)) return false;
+    seenInFile.add(key);
     return true;
   });
   const duplicates = valid.length - toImport.length;
@@ -100,20 +165,8 @@ export async function POST(request: NextRequest) {
   }
 
   // ---- 2. Resolve clients: reuse existing, create the rest (one per name). ----
+  // (clientIdByKey already loaded above during dedup key building.)
   const groupKeys = [...new Set(toImport.map((r) => nameKey(r.client_name!)))];
-
-  // Load existing clients for this owner once; match by normalized name.
-  const clientIdByKey = new Map<string, string>();
-  {
-    const { data: existingClients } = await db
-      .from("clients")
-      .select("id, full_name")
-      .eq("agent_id", ownerId);
-    for (const c of (existingClients as { id: string; full_name: string }[]) || []) {
-      const key = nameKey(c.full_name);
-      if (!clientIdByKey.has(key)) clientIdByKey.set(key, c.id);
-    }
-  }
 
   // Build inserts for clients that don't exist yet. Carry a phone if present.
   const phoneByKey = new Map<string, string>();
