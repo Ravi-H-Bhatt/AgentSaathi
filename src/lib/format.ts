@@ -44,6 +44,36 @@ export function daysUntil(d: string | null | undefined): number | null {
   if (!d) return null;
   const date = new Date(d);
   if (isNaN(date.getTime())) return null;
+  
   const now = new Date();
-  return Math.ceil((date.getTime() - now.getTime()) / 86_400_000);
+  // Adjust to next occurrence if the date has passed
+  let nextRenewal = new Date(date);
+  nextRenewal.setFullYear(now.getFullYear());
+  if (nextRenewal < now) {
+    nextRenewal.setFullYear(now.getFullYear() + 1);
+  }
+  
+  return Math.ceil((nextRenewal.getTime() - now.getTime()) / 86_400_000);
+}
+
+/**
+ * Get the next renewal date adjusted to current/future year.
+ * Example: If renewal_date is "2025-07-11" and today is after that,
+ * returns "2026-07-11" for display purposes.
+ */
+export function getAdjustedRenewalDate(d: string | null | undefined): string | null {
+  if (!d) return null;
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return null;
+  
+  const now = new Date();
+  let nextRenewal = new Date(date);
+  nextRenewal.setFullYear(now.getFullYear());
+  
+  // If that date has passed this year, use next year
+  if (nextRenewal < now) {
+    nextRenewal.setFullYear(now.getFullYear() + 1);
+  }
+  
+  return nextRenewal.toISOString().split('T')[0];
 }

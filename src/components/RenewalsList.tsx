@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Mail, X, Copy, Check, Send, Loader2 } from "lucide-react";
-import { shortDate, daysUntil, money } from "@/lib/format";
+import { Mail, X, Copy, Check, Send, Loader2, CheckCircle2 } from "lucide-react";
+import { shortDate, daysUntil, money, getAdjustedRenewalDate } from "@/lib/format";
 import { AnimatePresence, motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 export interface RenewalItem {
   id: string;
@@ -21,7 +22,9 @@ export interface RenewalItem {
 }
 
 function buildEmailDraft(item: RenewalItem, agentName?: string): { subject: string; body: string } {
-  const date = item.renewalDate ? shortDate(item.renewalDate) : "soon";  const subject = `Renewal Reminder: ${item.policyType || "Policy"} due ${date}`;
+  const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
+  const date = adjustedDate ? shortDate(adjustedDate) : (item.renewalDate ? shortDate(item.renewalDate) : "soon");
+  const subject = `Renewal Reminder: ${item.policyType || "Policy"} due ${date}`;
   const body = `Dear ${item.clientName},
 
 I hope you are doing well. This is a friendly reminder that the following policy is due for renewal on ${date}.
@@ -47,10 +50,13 @@ export function RenewalsList({
   renewals: RenewalItem[];
   agentName?: string;
 }) {
+  const router = useRouter();
   const [selected, setSelected] = useState<RenewalItem | null>(null);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [copied, setCopied] = useState<"subject" | "body" | null>(null);
+  const [renewingId, setRenewingId] = useState<string | null>(null);
+  const [confirmRenewId, setConfirmRenewId] = useState<string | null>(null);
 
   const draft = selected ? buildEmailDraft(selected, agentName) : null;
 
@@ -85,11 +91,37 @@ export function RenewalsList({
     } catch { /* ignore */ }
   }
 
+  async function markAsRenewed(policyId: string) {
+    setRenewingId(policyId);
+    try {
+      const res = await fetch("/api/policies/mark-renewed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ policyId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to mark as renewed");
+      }
+      // Refresh the page to update the renewals list
+      router.refresh();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to mark as renewed");
+    } finally {
+      setRenewingId(null);
+      setConfirmRenewId(null);
+    }
+  }
+
   return (
     <>
       <ul className="divide-y divide-border">
         {renewals.map((item) => {
           const dleft = daysUntil(item.renewalDate);
+          const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
+          const isConfirming = confirmRenewId === item.id;
+          const isProcessing = renewingId === item.id;
+          
           return (
             <li key={item.id} className="flex items-center justify-between px-5 py-4 gap-3 hover:bg-black/[.02] transition-colors">
               <Link
@@ -107,21 +139,58 @@ export function RenewalsList({
               </Link>
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right">
-                  <p className="text-sm font-medium">{shortDate(item.renewalDate)}</p>
+                  <p className="text-sm font-medium">{shortDate(adjustedDate)}</p>
                   <p className={`text-xs ${dleft != null && dleft <= 7 ? "text-red-600" : "text-muted"}`}>
                     {dleft != null
                       ? dleft < 0 ? `${Math.abs(dleft)}d overdue` : `in ${dleft}d`
                       : ""}
                   </p>
                 </div>
-                <button
-                  onClick={() => { setSelected(item); setSendResult(null); }}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
-                  title="Draft & send renewal email"
-                >
-                  <Mail size={13} />
-                  <span className="hidden sm:inline">Email</span>
-                </button>
+                
+                {/* Mark as Renewed button */}
+                {isConfirming ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => markAsRenewed(item.id)}
+                      disabled={isProcessing}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
+                      title="Confirm renewal"
+                    >
+                      {isProcessing ? (
+                        <Loader2 size={13} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={13} />
+                      )}
+                      <span>Confirm</span>
+                    </button>
+                    <button
+                      onClick={() => setConfirmRenewId(null)}
+                      disabled={isProcessing}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setConfirmRenewId(item.id)}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-600 text-green-600 hover:bg-green-600 hover:text-white transition-all duration-200"
+                      title="Mark policy as renewed"
+                    >
+                      <CheckCircle2 size={13} />
+                      <span className="hidden sm:inline">Renewed</span>
+                    </button>
+                    <button
+                      onClick={() => { setSelected(item); setSendResult(null); }}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                      title="Draft & send renewal email"
+                    >
+                      <Mail size={13} />
+                      <span className="hidden sm:inline">Email</span>
+                    </button>
+                  </>
+                )}
               </div>
             </li>
           );
