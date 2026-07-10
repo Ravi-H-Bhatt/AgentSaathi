@@ -1,7 +1,7 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor, isColleague } from "@/lib/team";
-import { money, isThisMonth } from "@/lib/format";
+import { money, daysUntil } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
 import { RenewalsList } from "@/components/RenewalsList";
@@ -20,41 +20,17 @@ export default async function DashboardPage() {
   ]);
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
-  
-  // Get renewals: overdue (last 3 days) + upcoming (next 30 days)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const threeDaysAgo = new Date(today);
-  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-  const thirtyDaysFromNow = new Date(today);
-  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-  
+
+  // Renewals list uses the CANONICAL recurring-renewal logic (daysUntil):
+  //   - annual recurrence: same dd/mm rolls to next year once >3 days past
+  //   - a date that passed 1-3 days ago shows as OVERDUE (still in the list)
+  //   - include anything from OVERDUE(-3) up to 30 days ahead
+  //   - sort by urgency: most overdue first, then soonest upcoming
   const renewalsThisMonth = policies
-    .filter((p) => {
-      if (!p.renewal_date) return false;
-      const renewalDate = new Date(p.renewal_date);
-      renewalDate.setHours(0, 0, 0, 0);
-      
-      // Exclude if overdue by more than 3 days
-      if (renewalDate < threeDaysAgo) return false;
-      
-      // Include if within next 30 days
-      return renewalDate <= thirtyDaysFromNow;
-    })
-    .sort((a, b) => {
-      // Sort by urgency: overdue first (most overdue = highest priority), then upcoming
-      const dateA = new Date(a.renewal_date!);
-      const dateB = new Date(b.renewal_date!);
-      dateA.setHours(0, 0, 0, 0);
-      dateB.setHours(0, 0, 0, 0);
-      
-      const daysUntilA = Math.floor((dateA.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      const daysUntilB = Math.floor((dateB.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
-      // Overdue policies (negative days) sorted by most overdue first
-      // Then upcoming policies sorted by soonest first
-      return daysUntilA - daysUntilB;
-    });
+    .map((p) => ({ p, d: daysUntil(p.renewal_date) }))
+    .filter(({ d }) => d != null && d >= -3 && d <= 30)
+    .sort((a, b) => (a.d as number) - (b.d as number))
+    .map(({ p }) => p);
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);
 
   return (
