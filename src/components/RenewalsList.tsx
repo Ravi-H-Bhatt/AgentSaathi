@@ -144,7 +144,7 @@ export function RenewalsList({
                     dleft != null && dleft < 0 
                       ? "text-red-600" 
                       : dleft != null && dleft <= 7 
-                      ? "text-amber-600" 
+                      ? "text-red-600" 
                       : "text-muted"
                   }`}>
                     {dleft != null

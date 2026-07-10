@@ -46,20 +46,35 @@ export function daysUntil(d: string | null | undefined): number | null {
   if (isNaN(date.getTime())) return null;
   
   const now = new Date();
-  // Adjust to next occurrence if the date has passed
-  let nextRenewal = new Date(date);
-  nextRenewal.setFullYear(now.getFullYear());
-  if (nextRenewal < now) {
-    nextRenewal.setFullYear(now.getFullYear() + 1);
+  now.setHours(0, 0, 0, 0);
+  
+  const renewalDate = new Date(date);
+  renewalDate.setHours(0, 0, 0, 0);
+  
+  // Calculate days difference from stored date
+  const daysDiff = Math.floor((renewalDate.getTime() - now.getTime()) / 86_400_000);
+  
+  // If overdue by 1-3 days, return negative (show as OVERDUE)
+  if (daysDiff < 0 && daysDiff >= -3) {
+    return daysDiff;
   }
   
-  return Math.ceil((nextRenewal.getTime() - now.getTime()) / 86_400_000);
+  // If overdue by more than 3 days, adjust to next year occurrence
+  if (daysDiff < -3) {
+    let nextRenewal = new Date(renewalDate);
+    nextRenewal.setFullYear(now.getFullYear() + 1);
+    return Math.floor((nextRenewal.getTime() - now.getTime()) / 86_400_000);
+  }
+  
+  // Future dates - return as-is
+  return daysDiff;
 }
 
 /**
  * Get the next renewal date adjusted to current/future year.
  * Example: If renewal_date is "2025-07-11" and today is after that,
  * returns "2026-07-11" for display purposes.
+ * BUT: if overdue by only 1-3 days, keep the original date to show it's overdue.
  */
 export function getAdjustedRenewalDate(d: string | null | undefined): string | null {
   if (!d) return null;
@@ -67,13 +82,25 @@ export function getAdjustedRenewalDate(d: string | null | undefined): string | n
   if (isNaN(date.getTime())) return null;
   
   const now = new Date();
-  let nextRenewal = new Date(date);
-  nextRenewal.setFullYear(now.getFullYear());
+  now.setHours(0, 0, 0, 0);
   
-  // If that date has passed this year, use next year
-  if (nextRenewal < now) {
-    nextRenewal.setFullYear(now.getFullYear() + 1);
+  const renewalDate = new Date(date);
+  renewalDate.setHours(0, 0, 0, 0);
+  
+  const daysDiff = Math.floor((renewalDate.getTime() - now.getTime()) / 86_400_000);
+  
+  // If overdue by 1-3 days, return original date (to show OVERDUE)
+  if (daysDiff < 0 && daysDiff >= -3) {
+    return d;
   }
   
-  return nextRenewal.toISOString().split('T')[0];
+  // If overdue by more than 3 days, adjust to next year
+  if (daysDiff < -3) {
+    let nextRenewal = new Date(renewalDate);
+    nextRenewal.setFullYear(now.getFullYear() + 1);
+    return nextRenewal.toISOString().split('T')[0];
+  }
+  
+  // Future dates - return as-is
+  return d;
 }
