@@ -20,13 +20,41 @@ export default async function DashboardPage() {
   ]);
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
+  
+  // Get renewals in next 30 days, EXCLUDING overdue policies older than 5 days
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const fiveDaysAgo = new Date(today);
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+  const thirtyDaysFromNow = new Date(today);
+  thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+  
   const renewalsThisMonth = policies
-    .filter((p) => isThisMonth(p.renewal_date))
-    .sort(
-      (a, b) =>
-        new Date(a.renewal_date!).getTime() -
-        new Date(b.renewal_date!).getTime()
-    );
+    .filter((p) => {
+      if (!p.renewal_date) return false;
+      const renewalDate = new Date(p.renewal_date);
+      renewalDate.setHours(0, 0, 0, 0);
+      
+      // Exclude if overdue by more than 5 days
+      if (renewalDate < fiveDaysAgo) return false;
+      
+      // Include if within next 30 days
+      return renewalDate <= thirtyDaysFromNow;
+    })
+    .sort((a, b) => {
+      // Sort by urgency: overdue first (most overdue = highest priority), then upcoming
+      const dateA = new Date(a.renewal_date!);
+      const dateB = new Date(b.renewal_date!);
+      dateA.setHours(0, 0, 0, 0);
+      dateB.setHours(0, 0, 0, 0);
+      
+      const daysUntilA = Math.floor((dateA.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const daysUntilB = Math.floor((dateB.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Overdue policies (negative days) sorted by most overdue first
+      // Then upcoming policies sorted by soonest first
+      return daysUntilA - daysUntilB;
+    });
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);
 
   return (

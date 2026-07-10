@@ -53,18 +53,17 @@ export async function POST(request: NextRequest) {
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
 
-  // Keep only rows that have a policy number AND a name (a policy needs an owner).
-  const valid = rows.filter(
-    (r) => r.policy_number && cleanName(r.client_name)
-  );
+  // Keep only rows that have a client name (policy number is optional in E-Register format).
+  const valid = rows.filter((r) => cleanName(r.client_name));
   const skippedNoName = rows.length - valid.length;
 
-  // ---- 1. Dedup against existing policies (by policy_number). ----
-  const incomingNumbers = [...new Set(valid.map((r) => r.policy_number!))];
+  // ---- 1. Dedup against existing policies (by policy_number, if present). ----
+  const incomingNumbers = [...new Set(valid.filter(r => r.policy_number).map((r) => r.policy_number!))];
   const existingNumbers = new Set<string>();
   // Chunk the IN() lookup to avoid oversized queries.
   for (let i = 0; i < incomingNumbers.length; i += 500) {
     const chunk = incomingNumbers.slice(i, i + 500);
+    if (chunk.length === 0) continue;
     const { data } = await db
       .from("policies")
       .select("policy_number")
@@ -76,9 +75,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Dedup within the upload itself (same policy number twice in the file).
+  // For rows without policy_number, we'll allow them all through.
   const seenInFile = new Set<string>();
   const toImport = valid.filter((r) => {
-    const num = r.policy_number!;
+    // If no policy number, allow it (can't dedup without identifier)
+    if (!r.policy_number) return true;
+    
+    const num = r.policy_number;
     if (existingNumbers.has(num) || seenInFile.has(num)) return false;
     seenInFile.add(num);
     return true;
