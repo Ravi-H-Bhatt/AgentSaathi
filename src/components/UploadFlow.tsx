@@ -372,7 +372,8 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
   // ---- BULK REVIEW ----
   if (step === "bulkReview" || step === "saving") {
     const preview = rows.slice(0, 100);
-    const named = rows.filter((r) => r.client_name && r.policy_number).length;
+    // Count rows with client_name (policy_number is optional)
+    const named = rows.filter((r) => r.client_name).length;
     const uniqueClients = new Set(
       rows
         .filter((r) => r.client_name)
