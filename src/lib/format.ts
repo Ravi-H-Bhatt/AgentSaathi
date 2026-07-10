@@ -40,55 +40,76 @@ export function isThisMonth(d: string | null | undefined): boolean {
   return nextRenewal >= now && nextRenewal <= thirtyDaysFromNow;
 }
 
+// How many days after a renewal date we still treat it as OVERDUE (rather than
+// rolling to next year). e.g. today 11 Jul → renewals from 06–11 Jul are OVERDUE.
+export const OVERDUE_GRACE_DAYS = 5;
+
 /**
- * Renewal-date logic used everywhere (dashboard filter, sort, and display).
+ * CANONICAL recurring-renewal logic used everywhere (dashboard filter, sort,
+ * and display) so they always agree.
  *
- * We use the ACTUAL stored renewal date — no year "rolling". This keeps things
- * predictable and matches how agents think:
- *   - If the renewal date is BEFORE today  → it's OVERDUE by that many days.
- *   - If it's today                        → due today.
- *   - If it's in the future                → renews in that many days.
+ * Policies renew annually on the SAME dd/mm. We map the stored month/day to the
+ * occurrence relevant RIGHT NOW (ignoring the stored YEAR):
+ *   - Use THIS year's occurrence if it's upcoming, or overdue by ≤ 5 days.
+ *   - If this year's occurrence is more than 5 days in the past, roll to NEXT
+ *     year's occurrence (that policy period is far off, not due now).
  *
- * A policy whose stored renewal date is, say, 03 Jul 2027 is genuinely ~357
- * days away (NOT overdue) and simply won't fall inside the dashboard's
- * near-term window.
+ * Examples (today = 11 Jul 2026):
+ *   - stored 26 May 2026 → this-yr 26 May is 46d past → roll → 26 May 2027 (~319d)
+ *   - stored 25 Jul 2027 → this-yr 25 Jul is +14d → in 14d
+ *   - stored 08 Jul 2025 → this-yr 08 Jul is 3d past → OVERDUE 3d
  */
 export function effectiveRenewalDate(
   d: string | null | undefined,
-  _today?: Date
+  today?: Date
 ): Date | null {
   if (!d) return null;
   const date = new Date(d);
   if (isNaN(date.getTime())) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
 
-/**
- * Whole days from today until the stored renewal date.
- *   - Negative → overdue by that many days (show OVERDUE).
- *   - 0 → due today.
- *   - Positive → renews in that many days.
- */
-export function daysUntil(d: string | null | undefined, today?: Date): number | null {
-  const date = effectiveRenewalDate(d);
-  if (!date) return null;
   const now = today ? new Date(today) : new Date();
   now.setHours(0, 0, 0, 0);
-  return Math.floor((date.getTime() - now.getTime()) / 86_400_000);
+
+  // This year's occurrence of the same month/day.
+  const occ = new Date(date);
+  occ.setHours(0, 0, 0, 0);
+  occ.setFullYear(now.getFullYear());
+
+  const deltaDays = Math.floor((occ.getTime() - now.getTime()) / 86_400_000);
+
+  // More than 5 days past → the relevant renewal is next year's occurrence.
+  if (deltaDays < -OVERDUE_GRACE_DAYS) {
+    occ.setFullYear(now.getFullYear() + 1);
+  }
+
+  return occ;
 }
 
 /**
- * The renewal date as YYYY-MM-DD for display (the real stored date, unchanged).
+ * Days until the effective (recurring) renewal.
+ *   - Negative (−1 … −5) → overdue by that many days (show OVERDUE).
+ *   - 0 → due today.
+ *   - Positive → upcoming.
+ */
+export function daysUntil(d: string | null | undefined, today?: Date): number | null {
+  const occ = effectiveRenewalDate(d, today);
+  if (!occ) return null;
+  const now = today ? new Date(today) : new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.floor((occ.getTime() - now.getTime()) / 86_400_000);
+}
+
+/**
+ * The effective (recurring) renewal date as YYYY-MM-DD, for display.
  */
 export function getAdjustedRenewalDate(
   d: string | null | undefined,
-  _today?: Date
+  today?: Date
 ): string | null {
-  const date = effectiveRenewalDate(d);
-  if (!date) return null;
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const occ = effectiveRenewalDate(d, today);
+  if (!occ) return null;
+  const y = occ.getFullYear();
+  const m = String(occ.getMonth() + 1).padStart(2, "0");
+  const day = String(occ.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
