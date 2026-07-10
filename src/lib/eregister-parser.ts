@@ -139,17 +139,26 @@ function parseDate(s: string): string | null {
 }
 
 /**
- * Parse money value
+ * Parse money value.
+ * Takes ONLY the first number token so footer/total text leaking into the
+ * column can never concatenate into an absurd value (e.g. 16,935 crore).
  */
 function parseMoney(s: string): number | null {
   if (!s) return null;
-  
-  // Remove everything except digits and decimal point
-  const cleaned = s.replace(/[^\d.]/g, '');
-  if (!cleaned) return null;
-  
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : Math.round(num); // Round to integer
+
+  // Match the FIRST number, allowing Indian/US comma grouping and decimals.
+  // e.g. "22,103.00 extra 47888" → "22,103.00"
+  const match = s.match(/\d[\d,]*(?:\.\d+)?/);
+  if (!match) return null;
+
+  const num = parseFloat(match[0].replace(/,/g, ""));
+  if (isNaN(num)) return null;
+
+  // Sanity cap: a single policy premium above ₹1 crore is not realistic for
+  // this register; treat it as a parse artifact and reject.
+  if (num > 10000000) return null;
+
+  return Math.round(num);
 }
 
 /**
@@ -280,9 +289,24 @@ export async function parseERegister(buffer: Buffer): Promise<RegisterRow[]> {
   
   const results: RegisterRow[] = [];
   
+  // Typical row height (used to bound the LAST row so it doesn't swallow
+  // footer/total text below the table, which would corrupt its premium).
+  const rowHeights: number[] = [];
+  for (let i = 1; i < recordYs.length; i++) {
+    rowHeights.push(recordYs[i] - recordYs[i - 1]);
+  }
+  const medianRowHeight =
+    rowHeights.length > 0
+      ? rowHeights.sort((a, b) => a - b)[Math.floor(rowHeights.length / 2)]
+      : 30;
+
   for (let i = 0; i < recordYs.length; i++) {
     const yStart = recordYs[i];
-    const yEnd = i + 1 < recordYs.length ? recordYs[i + 1] - 5 : Infinity;
+    // For the last row, cap the window to one row height instead of Infinity.
+    const yEnd =
+      i + 1 < recordYs.length
+        ? recordYs[i + 1] - 5
+        : yStart + medianRowHeight;
     
     const record = extractRecord(items, yStart, yEnd);
     if (record) {

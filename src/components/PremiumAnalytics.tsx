@@ -38,9 +38,17 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
     let totalDue = 0;
     let totalSI = 0;
 
+    // Guard against corrupt parse artifacts already saved in the DB.
+    // A single policy premium above ₹1 crore is not realistic for this book,
+    // so treat it as bad data and exclude it from all charts/totals.
+    const MAX_REALISTIC_PREMIUM = 10000000; // ₹1 Cr
+
     for (const p of policies) {
       // Total sum insured = full book value (all policies).
       totalSI += p.sum_insured || 0;
+
+      const premium =
+        p.premium && p.premium <= MAX_REALISTIC_PREMIUM ? p.premium : 0;
 
       if (!p.renewal_date) continue;
       const d = new Date(p.renewal_date);
@@ -70,12 +78,12 @@ export function PremiumAnalytics({ policies }: { policies: PolicyLite[] }) {
       // Only show renewals in current year OR next year (for recurring annual policies)
       if (displayYear === currentYear || displayYear === currentYear + 1) {
         const m = nextRenewal.getMonth();
-        prem[m] += p.premium || 0;
+        prem[m] += premium;
         count[m] += 1;
         
         // Only add to totalDue if it's actually due in current year
         if (displayYear === currentYear) {
-          totalDue += p.premium || 0;
+          totalDue += premium;
         }
       }
     }
