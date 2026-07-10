@@ -48,6 +48,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     created: number;
     duplicates: number;
     skippedNoName: number;
+    skippedConflict: number;
     clientsCreated: number;
   } | null>(null);
 
@@ -221,6 +222,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
         created: data.created ?? 0,
         duplicates: data.duplicates ?? 0,
         skippedNoName: data.skippedNoName ?? 0,
+        skippedConflict: data.skippedConflict ?? 0,
         clientsCreated: data.clientsCreated ?? 0,
       });
       setStep("done");
@@ -240,16 +242,53 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
           <CheckCircle2 className="mx-auto text-green-600" size={40} />
           {bulkResult ? (
             <>
-              <p className="mt-3 font-medium">
-                Imported {bulkResult.created.toLocaleString("en-IN")} policies
+              <p className="mt-3 text-lg font-semibold">
+                Imported {bulkResult.created.toLocaleString("en-IN")} new policies
               </p>
               <p className="text-sm text-muted mt-1">
-                {bulkResult.clientsCreated.toLocaleString("en-IN")} new clients
-                {bulkResult.duplicates > 0 &&
-                  ` · ${bulkResult.duplicates.toLocaleString("en-IN")} duplicates skipped`}
-                {bulkResult.skippedNoName > 0 &&
-                  ` · ${bulkResult.skippedNoName} rows skipped (no name)`}
+                {bulkResult.clientsCreated.toLocaleString("en-IN")} new clients created
               </p>
+
+              {/* Detailed breakdown so nothing is hidden */}
+              <div className="mt-5 mx-auto max-w-sm text-left rounded-xl border border-border bg-black/[.02] divide-y divide-border text-sm">
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-muted">✅ Newly imported</span>
+                  <span className="font-semibold text-green-700">
+                    {bulkResult.created.toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-muted">🔁 Already in system (identical)</span>
+                  <span className="font-semibold">
+                    {bulkResult.duplicates.toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-muted">⚠️ Blocked (same policy number)</span>
+                  <span
+                    className={`font-semibold ${
+                      bulkResult.skippedConflict > 0 ? "text-amber-700" : ""
+                    }`}
+                  >
+                    {bulkResult.skippedConflict.toLocaleString("en-IN")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-muted">⏭️ Skipped (no client name)</span>
+                  <span className="font-semibold">
+                    {bulkResult.skippedNoName.toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+
+              {bulkResult.skippedConflict > 0 && (
+                <p className="text-xs text-amber-700 mt-3 max-w-sm mx-auto">
+                  These {bulkResult.skippedConflict.toLocaleString("en-IN")} policies
+                  share a policy number with an existing one but have different
+                  details. To store them too, drop the unique policy_number
+                  constraint in the database (RUN_THIS_IN_SUPABASE.sql).
+                </p>
+              )}
             </>
           ) : (
             <>

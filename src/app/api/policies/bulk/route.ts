@@ -170,6 +170,7 @@ export async function POST(request: NextRequest) {
       created: 0,
       duplicates,
       skippedNoName,
+      skippedConflict: 0,
       clientsCreated: 0,
       message: "Nothing new to import — all policies already exist.",
     });
