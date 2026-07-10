@@ -21,11 +21,11 @@ export default async function DashboardPage() {
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
   
-  // Get renewals in next 30 days, EXCLUDING overdue policies older than 5 days
+  // Get renewals: overdue (last 3 days) + upcoming (next 30 days)
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const fiveDaysAgo = new Date(today);
-  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+  const threeDaysAgo = new Date(today);
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
   const thirtyDaysFromNow = new Date(today);
   thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
   
@@ -35,8 +35,8 @@ export default async function DashboardPage() {
       const renewalDate = new Date(p.renewal_date);
       renewalDate.setHours(0, 0, 0, 0);
       
-      // Exclude if overdue by more than 5 days
-      if (renewalDate < fiveDaysAgo) return false;
+      // Exclude if overdue by more than 3 days
+      if (renewalDate < threeDaysAgo) return false;
       
       // Include if within next 30 days
       return renewalDate <= thirtyDaysFromNow;

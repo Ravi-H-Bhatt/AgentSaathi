@@ -140,9 +140,19 @@ export function RenewalsList({
               <div className="flex items-center gap-3 shrink-0">
                 <div className="text-right">
                   <p className="text-sm font-medium">{shortDate(adjustedDate)}</p>
-                  <p className={`text-xs ${dleft != null && dleft <= 7 ? "text-red-600" : "text-muted"}`}>
+                  <p className={`text-xs font-semibold ${
+                    dleft != null && dleft < 0 
+                      ? "text-red-600" 
+                      : dleft != null && dleft <= 7 
+                      ? "text-amber-600" 
+                      : "text-muted"
+                  }`}>
                     {dleft != null
-                      ? dleft < 0 ? `${Math.abs(dleft)}d overdue` : `in ${dleft}d`
+                      ? dleft < 0 
+                        ? `OVERDUE ${Math.abs(dleft)}d` 
+                        : dleft === 0
+                        ? "DUE TODAY"
+                        : `in ${dleft}d`
                       : ""}
                   </p>
                 </div>
