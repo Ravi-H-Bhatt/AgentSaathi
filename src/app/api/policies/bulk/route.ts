@@ -228,6 +228,7 @@ export async function POST(request: NextRequest) {
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
   let created = 0;
+  let skippedConflict = 0;
   for (let i = 0; i < policyRows.length; i += 500) {
     const chunk = policyRows.slice(i, i + 500);
     let { error, count } = await db
@@ -241,6 +242,31 @@ export async function POST(request: NextRequest) {
       ({ error, count } = await db
         .from("policies")
         .insert(chunkNoMode, { count: "exact" }));
+    }
+
+    // Graceful fallback: if the old unique constraint still exists in the DB
+    // (migration 0008 not yet run), a whole chunk fails because ONE row shares
+    // a policy_number. Retry the chunk row-by-row so all non-conflicting rows
+    // still get imported and NO data is damaged.
+    if (error && /duplicate key/i.test(error.message)) {
+      for (const row of chunk) {
+        const { error: rowErr } = await db.from("policies").insert(row);
+        if (rowErr) {
+          if (/duplicate key/i.test(rowErr.message)) {
+            skippedConflict++; // Blocked by legacy unique constraint — skip safely.
+          } else if (/mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
+            const { mode: _mode, ...rest } = row;
+            const { error: retryErr } = await db.from("policies").insert(rest);
+            if (retryErr) skippedConflict++;
+            else created++;
+          } else {
+            skippedConflict++;
+          }
+        } else {
+          created++;
+        }
+      }
+      continue; // Move to next chunk.
     }
 
     if (error) {

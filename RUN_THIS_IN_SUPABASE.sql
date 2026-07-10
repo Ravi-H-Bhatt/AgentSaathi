@@ -1,6 +1,19 @@
 -- ============================================================
 -- RUN THIS SQL IN SUPABASE DASHBOARD → SQL EDITOR
--- This creates the missing tables needed for error reporting
+-- ============================================================
+
+-- ⚠️ URGENT FIX: Drop the unique constraint that blocks re-upload.
+-- The app now deduplicates using a COMPOSITE key (policy_number + client
+-- + product + premium + dates), so the same policy_number can legitimately
+-- appear multiple times with different premiums/dates. This constraint was
+-- causing: "duplicate key value violates unique constraint
+-- policies_agent_policy_number_unique". Dropping it is SAFE — no data is
+-- deleted, it only removes the blocking rule.
+alter table public.policies
+  drop constraint if exists policies_agent_policy_number_unique;
+
+-- ============================================================
+-- Error reporting + email drafts tables (safe to re-run)
 -- ============================================================
 
 -- Create error_reports table
@@ -57,17 +70,17 @@ create policy email_drafts_owner_all on public.email_drafts
   for all using (agent_id = auth.uid()) with check (agent_id = auth.uid());
 
 -- ============================================================
--- VERIFICATION: Check tables were created
+-- VERIFICATION
 -- ============================================================
-SELECT 
-  table_name, 
+-- Confirm the constraint is gone (should return 0 rows):
+SELECT conname FROM pg_constraint
+WHERE conname = 'policies_agent_policy_number_unique';
+
+-- Confirm tables exist:
+SELECT
+  table_name,
   (SELECT count(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count
 FROM information_schema.tables t
-WHERE table_schema = 'public' 
+WHERE table_schema = 'public'
 AND table_name IN ('error_reports', 'email_drafts')
 ORDER BY table_name;
-
--- Should return:
--- error_reports | 8
--- email_drafts  | 7
-
