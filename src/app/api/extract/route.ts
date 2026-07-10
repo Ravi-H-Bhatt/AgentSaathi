@@ -15,59 +15,60 @@ export const maxDuration = 60;
  * structured (editable) fields plus the storage path.
  */
 export async function POST(request: NextRequest) {
-  const agent = await getCurrentAgent();
-  if (!agent || agent.status !== "approved") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  if (!permissionsFor(agent).upload) {
-    return NextResponse.json(
-      { error: "You don't have permission to upload policies." },
-      { status: 403 }
-    );
-  }
+  try {
+    const agent = await getCurrentAgent();
+    if (!agent || agent.status !== "approved") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!permissionsFor(agent).upload) {
+      return NextResponse.json(
+        { error: "You don't have permission to upload policies." },
+        { status: 403 }
+      );
+    }
 
-  const form = await request.formData();
-  const file = form.get("file");
-  const category = (() => {
-    const c = String(form.get("category") || "").toUpperCase();
-    return c === "LIFE" || c === "GENERAL" ? (c as "LIFE" | "GENERAL") : null;
-  })();
-  if (!(file instanceof File)) {
-    return NextResponse.json({ error: "No file provided" }, { status: 400 });
-  }
-  if (file.type !== "application/pdf") {
-    return NextResponse.json({ error: "Only PDF files are supported" }, { status: 400 });
-  }
+    const form = await request.formData();
+    const file = form.get("file");
+    const category = (() => {
+      const c = String(form.get("category") || "").toUpperCase();
+      return c === "LIFE" || c === "GENERAL" ? (c as "LIFE" | "GENERAL") : null;
+    })();
+    if (!(file instanceof File)) {
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+    if (file.type !== "application/pdf") {
+      return NextResponse.json({ error: "Only PDF files are supported" }, { status: 400 });
+    }
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const db = createAdminClient();
-  const ownerId = ownerIdFor(agent);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const db = createAdminClient();
+    const ownerId = ownerIdFor(agent);
 
-  // Store original under {ownerId}/{timestamp}-{filename}
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${ownerId}/${Date.now()}-${safeName}`;
-  const { error: upErr } = await db.storage
-    .from("policy-files")
-    .upload(path, bytes, { contentType: "application/pdf", upsert: false });
+    // Store original under {ownerId}/{timestamp}-{filename}
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `${ownerId}/${Date.now()}-${safeName}`;
+    const { error: upErr } = await db.storage
+      .from("policy-files")
+      .upload(path, bytes, { contentType: "application/pdf", upsert: false });
 
-  if (upErr) {
-    return NextResponse.json(
-      { error: "Upload failed: " + upErr.message },
-      { status: 500 }
-    );
-  }
+    if (upErr) {
+      return NextResponse.json(
+        { error: "Upload failed: " + upErr.message },
+        { status: 500 }
+      );
+    }
 
-  await logActivity(agent, "upload_policy", file.name);
+    await logActivity(agent, "upload_policy", file.name);
 
-  // Extract text layer.
-  const text = await extractPdfText(bytes);
+    // Extract text layer.
+    const text = await extractPdfText(bytes);
 
-  if (!text || text.length < 20) {
-    return NextResponse.json({
-      filePath: path,
-      fileName: file.name,
-      scanned: true,
-      message:
+    if (!text || text.length < 20) {
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: true,
+        message:
         "This PDF has no readable text layer (it may be a scan/image). Please enter the details manually.",
       extracted: emptyExtract(),
     });
@@ -165,6 +166,17 @@ export async function POST(request: NextRequest) {
       message: "Could not auto-parse the document. Please review/enter fields manually.",
       extracted: emptyExtract(),
     });
+  }
+  } catch (error) {
+    // Catch any unexpected errors and return JSON
+    console.error("[extract] Unexpected error:", error);
+    return NextResponse.json(
+      { 
+        error: error instanceof Error ? error.message : "An unexpected error occurred during extraction",
+        details: process.env.NODE_ENV === "development" ? String(error) : undefined
+      }, 
+      { status: 500 }
+    );
   }
 }
 

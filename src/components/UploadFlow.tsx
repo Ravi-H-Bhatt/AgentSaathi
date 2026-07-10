@@ -89,6 +89,14 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     if (category) fd.append("category", category);
     try {
       const res = await fetch("/api/extract", { method: "POST", body: fd });
+      
+      // Check if response is JSON before parsing
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await res.text();
+        throw new Error(`Server error: ${text.slice(0, 200)}`);
+      }
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Extraction failed");
       setFilePath(data.filePath);
