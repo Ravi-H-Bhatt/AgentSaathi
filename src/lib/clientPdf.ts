@@ -52,9 +52,10 @@ export function downloadClientPdf(
     144
   );
 
-  // Policies table
+  // Policies table. Insurer may be stored in company OR product_name
+  // (bulk-imported register rows keep the insurer in product_name).
   const body = client.policies.map((p) => [
-    p.company || "—",
+    p.company || p.product_name || "—",
     p.policy_type || "—",
     p.policy_number || "—",
     pdfMoney(p.sum_insured),
@@ -140,7 +141,7 @@ export function downloadAllClientsPdf(
       c.policies.forEach((p, i) => {
         body.push([
           i === 0 ? c.full_name : "",
-          p.company || "—",
+          p.company || p.product_name || "—",
           p.policy_type || "—",
           p.policy_number || "—",
           pdfMoney(p.sum_insured),
@@ -187,4 +188,132 @@ export function downloadAllClientsPdf(
   doc.text(`Total annual premium: ${pdfMoney(totalPrem)}`, 40, endY + 16);
 
   doc.save(`AgentSaathi_book_of_business.pdf`);
+}
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * Download a PDF of all policies whose renewal falls in a given month
+ * (0 = January … 11 = December). Recurs annually — matches the month of the
+ * stored renewal date regardless of year. One row per policy.
+ */
+export function downloadRenewalsByMonthPdf(
+  clients: ClientWithPolicies[],
+  agentName: string,
+  month: number
+) {
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const W = doc.internal.pageSize.getWidth();
+  const monthName = MONTH_NAMES[month] || "All";
+
+  // Header bar
+  doc.setFillColor(10, 10, 10);
+  doc.rect(0, 0, W, 64, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(18);
+  doc.text("AgentSaathi", 40, 40);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Renewals Report", W - 40, 40, { align: "right" });
+
+  doc.setTextColor(10, 10, 10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text(`Renewals in ${monthName}`, 40, 100);
+
+  // Collect matching policies (by renewal month), with client info.
+  const rows: {
+    client: string;
+    phone: string;
+    company: string;
+    type: string;
+    number: string;
+    sum: number | null;
+    premium: number | null;
+    renewal: string | null;
+  }[] = [];
+
+  for (const c of clients) {
+    for (const p of c.policies) {
+      if (!p.renewal_date) continue;
+      const d = new Date(p.renewal_date);
+      if (isNaN(d.getTime()) || d.getMonth() !== month) continue;
+      rows.push({
+        client: c.full_name,
+        phone: c.phone || "—",
+        company: p.company || p.product_name || "—",
+        type: p.policy_type || "—",
+        number: p.policy_number || "—",
+        sum: p.sum_insured,
+        premium: p.premium,
+        renewal: p.renewal_date,
+      });
+    }
+  }
+
+  // Sort by day of month (soonest first within the month).
+  rows.sort((a, b) => {
+    const da = a.renewal ? new Date(a.renewal).getDate() : 0;
+    const db = b.renewal ? new Date(b.renewal).getDate() : 0;
+    return da - db;
+  });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(90, 90, 90);
+  doc.text(
+    `${rows.length} policies renewing in ${monthName} · prepared by ${agentName} on ${shortDate(
+      new Date().toISOString()
+    )}`,
+    40,
+    118
+  );
+
+  const body = rows.map((r) => [
+    r.client,
+    r.phone,
+    r.company,
+    r.type,
+    r.number,
+    pdfMoney(r.sum),
+    pdfMoney(r.premium),
+    shortDate(r.renewal),
+  ]);
+
+  autoTable(doc, {
+    startY: 140,
+    head: [
+      ["Client", "Phone", "Company", "Type", "Policy No.", "Sum Insured", "Premium", "Renewal"],
+    ],
+    body: body.length ? body : [["No renewals in " + monthName, "—", "—", "—", "—", "—", "—", "—"]],
+    theme: "grid",
+    headStyles: { fillColor: [10, 10, 10], textColor: 255, fontSize: 7.5 },
+    bodyStyles: { fontSize: 7.5, textColor: 30, cellPadding: 3 },
+    alternateRowStyles: { fillColor: [248, 248, 249] },
+    columnStyles: {
+      0: { fontStyle: "bold", cellWidth: 85 },
+      1: { cellWidth: 60 },
+      5: { halign: "right", cellWidth: 65 },
+      6: { halign: "right", cellWidth: 55 },
+      7: { cellWidth: 55 },
+    },
+    margin: { left: 40, right: 40 },
+  });
+
+  const totalPrem = rows.reduce((s, r) => s + (r.premium || 0), 0);
+  const totalSI = rows.reduce((s, r) => s + (r.sum || 0), 0);
+
+  // @ts-expect-error lastAutoTable is added by the plugin at runtime
+  const endY = (doc.lastAutoTable?.finalY ?? 200) + 24;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(10, 10, 10);
+  doc.text(`Total sum insured: ${pdfMoney(totalSI)}`, 40, endY);
+  doc.text(`Total premium: ${pdfMoney(totalPrem)}`, 40, endY + 16);
+
+  doc.save(`AgentSaathi_renewals_${monthName}.pdf`);
 }

@@ -5,6 +5,7 @@ import { getAllClientsWithPolicies } from "@/lib/data";
 import { ownerIdFor, permissionsFor, isColleague } from "@/lib/team";
 import { ClientsList } from "@/components/ClientsList";
 import { DownloadAllButton } from "@/components/DownloadAllButton";
+import { MonthlyRenewalDownload } from "@/components/MonthlyRenewalDownload";
 import { DeleteAllClientsButton } from "@/components/DeleteAllClientsButton";
 
 export default async function ClientsPage() {
@@ -31,12 +32,16 @@ export default async function ClientsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted mt-1">{clientsWithPolicies.length} total</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <MonthlyRenewalDownload
+            clients={clientsWithPolicies}
+            agentName={agent.full_name || agent.email}
+          />
           <DownloadAllButton
             clients={clientsWithPolicies}
             agentName={agent.full_name || agent.email}
