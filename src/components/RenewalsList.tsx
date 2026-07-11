@@ -176,7 +176,7 @@ export function RenewalsList({
           const waLink = buildWhatsAppLink(item, agentName);
           
           return (
-            <li key={item.id} className="flex items-center justify-between px-5 py-4 gap-3 hover:bg-black/[.02] transition-colors">
+            <li key={item.id} className="flex items-center justify-between px-4 sm:px-5 py-4 gap-2 sm:gap-3 hover:bg-black/[.02] transition-colors">
               <Link
                 href={`/clients/${item.clientId}`}
                 className="min-w-0 flex-1 group"
@@ -190,9 +190,9 @@ export function RenewalsList({
                   {item.policyNumber ? ` · ${item.policyNumber}` : ""}
                 </p>
               </Link>
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="text-right w-24 shrink-0">
-                  <p className="text-sm font-medium">{shortDate(adjustedDate)}</p>
+              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                <div className="text-right w-[72px] sm:w-24 shrink-0">
+                  <p className="text-[13px] sm:text-sm font-medium whitespace-nowrap">{shortDate(adjustedDate)}</p>
                   <p className={`text-xs font-semibold ${
                     dleft != null && dleft < 0 
                       ? "text-red-600" 
@@ -210,9 +210,10 @@ export function RenewalsList({
                   </p>
                 </div>
                 
-                {/* Fixed-width action area → keeps the date column aligned
-                    whether or not the WhatsApp button is present. */}
-                <div className="flex items-center justify-end gap-2 w-[210px] shrink-0">
+                {/* Action area. On desktop it's a fixed width so the date
+                    column stays aligned; on mobile it shrinks to icon buttons
+                    so the client name keeps enough room. */}
+                <div className="flex items-center justify-end gap-1.5 sm:gap-2 w-auto sm:w-[210px] shrink-0">
                 {isConfirming ? (
                   <>
                     <button
