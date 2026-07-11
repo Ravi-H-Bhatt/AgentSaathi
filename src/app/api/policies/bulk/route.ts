@@ -144,9 +144,12 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // ---- 2. Filter incoming rows: keep only those NOT already in DB and not
-  //         exact duplicates within this same upload. ----
-  const seenInFile = new Set<string>();
+  // ---- 2. Filter incoming rows: keep every row that is NOT already in the DB.
+  //         We deliberately DO NOT dedup within the file — the register can
+  //         legitimately list the same client/product/premium twice as two
+  //         separate transactions (different Tra IDs), so all such rows are
+  //         imported. Re-uploading still won't double, because any row whose
+  //         composite key already exists in the DB is skipped. ----
   const toImport = valid.filter((r) => {
     const key = rowKey(
       r.client_name!,
@@ -158,9 +161,7 @@ export async function POST(request: NextRequest) {
       r.start_date,
       r.renewal_date
     );
-    if (existingKeys.has(key) || seenInFile.has(key)) return false;
-    seenInFile.add(key);
-    return true;
+    return !existingKeys.has(key);
   });
   const duplicates = valid.length - toImport.length;
 

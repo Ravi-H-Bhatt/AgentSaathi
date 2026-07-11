@@ -48,13 +48,36 @@ export async function DELETE(request: NextRequest) {
   const ownerId = ownerIdFor(agent);
 
   if (all) {
-    // Clean up all stored files first, then delete every client (policies
-    // cascade via FK on delete).
-    const { data: policies } = await db
+    // Clean up all stored files first (paginate past the 1000-row cap so we
+    // fetch EVERY file path, not just the first 1000).
+    const allPaths: Pick<Policy, "source_file_path">[] = [];
+    {
+      let from = 0;
+      const pageSize = 1000;
+      for (;;) {
+        const { data } = await db
+          .from("policies")
+          .select("source_file_path")
+          .eq("agent_id", ownerId)
+          .range(from, from + pageSize - 1);
+        const batch = (data as Policy[]) || [];
+        allPaths.push(...batch);
+        if (batch.length < pageSize) break;
+        from += pageSize;
+      }
+    }
+    await removePolicyFiles(db, allPaths);
+
+    // Explicitly delete policies FIRST (belt-and-suspenders — don't rely only
+    // on the FK cascade), then delete clients. This guarantees a truly clean
+    // slate so a re-upload imports everything fresh.
+    const { error: polErr } = await db
       .from("policies")
-      .select("source_file_path")
+      .delete()
       .eq("agent_id", ownerId);
-    await removePolicyFiles(db, (policies as Policy[]) || []);
+    if (polErr) {
+      return NextResponse.json({ error: polErr.message }, { status: 500 });
+    }
 
     const { error } = await db.from("clients").delete().eq("agent_id", ownerId);
     if (error) {
