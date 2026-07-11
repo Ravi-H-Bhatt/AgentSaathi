@@ -12,10 +12,11 @@ const EREGISTER_COLUMNS = {
   appl_date: { x: 103, width: 60 },       // 103-163
   ins_co: { x: 163, width: 77 },          // 163-240 (EXPANDED to catch x=170)
   policy_type: { x: 240, width: 250 },    // 240-490 (Wide to catch all, will clean up)
-  client_name: { x: 462, width: 160 },    // 462-622 (Name of Client) — lowered left
-                                          // edge so long, centre-aligned company
-                                          // names (e.g. "ARTH AIR TECHNOLOGIES",
-                                          // which starts ~x=469) aren't dropped.
+  client_name: { x: 450, width: 175 },    // 450-625 (Name of Client) — left edge
+                                          // lowered to 450 so long, centre-aligned
+                                          // company names (which begin as far left
+                                          // as x=454, e.g. "SHRIJEE PAPER MILLS",
+                                          // "CHAIRMEN/SECRETARY …") aren't dropped.
   proposer_name: { x: 722, width: 128 },  // 722-850
   policy_number: { x: 928, width: 128 },  // 928-1056 (long policy numbers)
   source_code: { x: 1101, width: 28 },    // 1101-1129

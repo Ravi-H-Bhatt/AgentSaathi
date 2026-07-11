@@ -101,25 +101,26 @@ export function ClientDetail({
   return (
     <div className="space-y-6">
       {/* Header card */}
-      <div className="rounded-2xl border border-border bg-card p-6">
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-foreground text-background flex items-center justify-center text-xl font-bold">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-foreground text-background flex items-center justify-center text-lg sm:text-xl font-bold shrink-0">
               {client.full_name.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
                 {client.full_name}
               </h1>
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted">
                 {client.email && (
-                  <span className="inline-flex items-center gap-1">
-                    <AtSign size={14} /> {client.email}
+                  <span className="inline-flex items-center gap-1 min-w-0">
+                    <AtSign size={14} className="shrink-0" />{" "}
+                    <span className="break-all">{client.email}</span>
                   </span>
                 )}
                 {client.phone && (
                   <span className="inline-flex items-center gap-1">
-                    <Phone size={14} /> {client.phone}
+                    <Phone size={14} className="shrink-0" /> {client.phone}
                   </span>
                 )}
                 {client.age != null && <span>Age {client.age}</span>}
