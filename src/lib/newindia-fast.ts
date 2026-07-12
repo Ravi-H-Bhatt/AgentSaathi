@@ -398,5 +398,6 @@ export function looksLikeNewIndiaRegister(text: string): boolean {
   const head = text.slice(0, 8000);
   const hasHeader = /policy\s*expiry\s*register/i.test(head) && /new\s*india/i.test(head);
   const policyNumbers = (text.match(/\d{20,25}:\s*[A-Z]{2}\s+/g) || []).length;
-  return hasHeader && policyNumbers >= 5;
+  // Unique header phrase → one policy row is enough (handles small monthly reports).
+  return hasHeader && policyNumbers >= 1;
 }

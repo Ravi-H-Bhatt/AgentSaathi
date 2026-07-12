@@ -31,7 +31,8 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "any",
       },
       {
-        src: "/icon-512.png",
+        // Full-bleed maskable icon so Android doesn't crop/ring the logo.
+        src: "/icon-maskable-512",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

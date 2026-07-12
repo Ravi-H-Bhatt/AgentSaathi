@@ -29,7 +29,10 @@ export function looksLikeNewIndiaRegister(text: string): boolean {
   const head = text.slice(0, 8000);
   const hasHeader = /policy\s*expiry\s*register/i.test(head) && /new\s*india/i.test(head);
   const policyNumbers = (text.match(/\d{20,25}:\s*[A-Z]{2}\s+/g) || []).length;
-  return hasHeader && policyNumbers >= 5;
+  // The header phrase is unique to this report, so a single policy row is enough
+  // to confidently route here. This ensures small monthly reports (even 1-2
+  // policies) still use the accurate coordinate parser instead of the LLM.
+  return hasHeader && policyNumbers >= 1;
 }
 
 export async function parseNewIndiaRegister(text: string): Promise<RegisterRow[]> {
