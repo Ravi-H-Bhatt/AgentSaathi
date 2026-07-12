@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud, FileText, Loader2, CheckCircle2, Table2, Package } from "lucide-react";
 import type { ExtractedPolicy, RegisterRow } from "@/lib/types";
+import { companyLabel } from "@/lib/format";
 
 type Step = "idle" | "extracting" | "review" | "bulkReview" | "saving" | "done" | "bundleUploading" | "bundleDone";
 type Category = "LIFE" | "GENERAL" | null;
@@ -453,6 +454,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                 <tr className="sticky top-0 bg-card border-b border-border text-left text-xs text-muted uppercase tracking-wide">
                   <th className="px-3 py-3 font-semibold w-28">Policy No.</th>
                   <th className="px-3 py-3 font-semibold min-w-[160px]">Name</th>
+                  <th className="px-3 py-3 font-semibold w-24">Company</th>
                   <th className="px-3 py-3 font-semibold min-w-[200px]">Address</th>
                   <th className="px-3 py-3 font-semibold min-w-[180px]">Product</th>
                   <th className="px-3 py-3 font-semibold w-14">Mode</th>
@@ -472,6 +474,9 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                     <td className="px-3 py-2.5 font-mono text-xs text-muted">{r.policy_number}</td>
                     <td className="px-3 py-2.5 font-medium">
                       {r.client_name || <span className="text-amber-500 text-xs">No name</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-xs">
+                      {companyLabel(r.company, r.product_name) || "—"}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-muted">
                       {r.client_address ? (

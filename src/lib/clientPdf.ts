@@ -2,7 +2,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { shortDate } from "@/lib/format";
+import { shortDate, companyLabel } from "@/lib/format";
 import type { ClientWithPolicies } from "@/lib/types";
 
 /** Money formatter for PDFs. jsPDF's built-in Helvetica has no Rupee glyph (₹),
@@ -55,7 +55,7 @@ export function downloadClientPdf(
   // Policies table. Insurer may be stored in company OR product_name
   // (bulk-imported register rows keep the insurer in product_name).
   const body = client.policies.map((p) => [
-    p.company || p.product_name || "—",
+    companyLabel(p.company, p.product_name) || p.product_name || "—",
     p.policy_type || "—",
     p.policy_number || "—",
     pdfMoney(p.sum_insured),
@@ -141,7 +141,7 @@ export function downloadAllClientsPdf(
       c.policies.forEach((p, i) => {
         body.push([
           i === 0 ? c.full_name : "",
-          p.company || p.product_name || "—",
+          companyLabel(p.company, p.product_name) || p.product_name || "—",
           p.policy_type || "—",
           p.policy_number || "—",
           pdfMoney(p.sum_insured),
@@ -245,7 +245,7 @@ export function downloadRenewalsByMonthPdf(
       rows.push({
         client: c.full_name,
         phone: c.phone || "—",
-        company: p.company || p.product_name || "—",
+        company: companyLabel(p.company, p.product_name) || p.product_name || "—",
         type: p.policy_type || "—",
         number: p.policy_number || "—",
         sum: p.sum_insured,
