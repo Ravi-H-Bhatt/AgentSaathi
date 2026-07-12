@@ -110,7 +110,11 @@ export async function POST(request: NextRequest) {
     ].join("|");
 
   // ---- 1. Build set of existing policy keys (paginated over ALL policies). ----
+  // Also map every stored policy_number → its client_id, so an uploaded renewal
+  // can be attached to the client who already holds the current OR previous
+  // policy number (renewal mapping).
   const existingKeys = new Set<string>();
+  const clientIdByPolicyNumber = new Map<string, string>();
   {
     let from = 0;
     const pageSize = 1000;
@@ -126,6 +130,9 @@ export async function POST(request: NextRequest) {
       if (batch.length === 0) break;
       for (const p of batch) {
         const cname = clientNameById.get(p.client_id) || "";
+        if (p.policy_number && p.client_id) {
+          clientIdByPolicyNumber.set(String(p.policy_number).trim(), p.client_id);
+        }
         existingKeys.add(
           rowKey(
             cname,
@@ -144,6 +151,21 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Renewal mapping: for each row, if its previous OR current policy number is
+  // already stored, remember which existing client it belongs to. That client
+  // wins over name-based grouping so the renewed policy shows under the right
+  // person even when the name is written differently.
+  const forcedClientForRow = new Map<RegisterRow, string>();
+  for (const r of valid) {
+    const prev = r.previous_policy_number?.toString().trim();
+    const cur = r.policy_number?.toString().trim();
+    const cid =
+      (prev && clientIdByPolicyNumber.get(prev)) ||
+      (cur && clientIdByPolicyNumber.get(cur)) ||
+      null;
+    if (cid) forcedClientForRow.set(r, cid);
+  }
+
   // ---- 2. Filter incoming rows: keep every row that is NOT already in the DB.
   //         We deliberately DO NOT dedup within the file — the register can
   //         legitimately list the same client/product/premium twice as two
@@ -151,6 +173,16 @@ export async function POST(request: NextRequest) {
   //         imported. Re-uploading still won't double, because any row whose
   //         composite key already exists in the DB is skipped. ----
   const toImport = valid.filter((r) => {
+    // A renewal/schedule row (has a previous policy number) whose current policy
+    // number is already stored → skip, so re-uploading the same policy schedule
+    // never doubles it (its name may differ from the mapped client's name).
+    if (
+      r.previous_policy_number &&
+      r.policy_number &&
+      clientIdByPolicyNumber.has(String(r.policy_number).trim())
+    ) {
+      return false;
+    }
     const key = rowKey(
       r.client_name!,
       r.policy_number,
@@ -179,7 +211,15 @@ export async function POST(request: NextRequest) {
 
   // ---- 2. Resolve clients: reuse existing, create the rest (one per name). ----
   // (clientIdByKey already loaded above during dedup key building.)
-  const groupKeys = [...new Set(toImport.map((r) => nameKey(r.client_name!)))];
+  // Only rows that are NOT force-mapped to an existing client need name-based
+  // client grouping/creation. Force-mapped rows attach to their existing client.
+  const groupKeys = [
+    ...new Set(
+      toImport
+        .filter((r) => !forcedClientForRow.has(r))
+        .map((r) => nameKey(r.client_name!))
+    ),
+  ];
 
   // Build inserts for clients that don't exist yet. Carry a phone if present.
   const phoneByKey = new Map<string, string>();
@@ -220,7 +260,10 @@ export async function POST(request: NextRequest) {
   // ---- 3. Build policy rows, linked to their client. ----
   const policyRows = toImport
     .map((r) => {
-      const clientId = clientIdByKey.get(nameKey(r.client_name!));
+      // Renewal mapping wins: attach to the existing client that holds the
+      // current/previous policy number. Otherwise use the name-grouped client.
+      const clientId =
+        forcedClientForRow.get(r) || clientIdByKey.get(nameKey(r.client_name!));
       if (!clientId) return null;
       return {
         agent_id: ownerId,
@@ -237,10 +280,19 @@ export async function POST(request: NextRequest) {
         renewal_date: r.renewal_date,
         source_file_path: body.source_file_path || null,
         // Extra extracted fields with no dedicated column are kept in raw_extract
-        // (JSON) so nothing is lost — e.g. policy holder type (Individual/Org).
-        raw_extract: r.policy_holder_type
-          ? { policy_holder_type: r.policy_holder_type }
-          : null,
+        // (JSON) so nothing is lost — e.g. policy holder type and the previous
+        // policy number this policy renewed.
+        raw_extract:
+          r.policy_holder_type || r.previous_policy_number
+            ? {
+                ...(r.policy_holder_type
+                  ? { policy_holder_type: r.policy_holder_type }
+                  : {}),
+                ...(r.previous_policy_number
+                  ? { previous_policy_number: r.previous_policy_number }
+                  : {}),
+              }
+            : null,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);

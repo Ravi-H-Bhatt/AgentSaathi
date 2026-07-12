@@ -1,6 +1,7 @@
 import type { RegisterRow } from "@/lib/types";
 import { looksLikeNewIndiaRegister, parseNewIndiaRegister } from "./newindia";
 import { looksLikeNewIndiaPremiumBill, parseNewIndiaPremiumBill } from "./newindia-premium";
+import { looksLikeNewIndiaPolicySchedule, parseNewIndiaPolicySchedule } from "./newindia-policy";
 import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
 import { looksLikeERegister, parseERegister } from "./eregister-parser";
 
@@ -23,9 +24,16 @@ import { looksLikeERegister, parseERegister } from "./eregister-parser";
  */
 export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<{ 
   rows: RegisterRow[]; 
-  type: 'newindia' | 'newindia-premium' | 'tmi' | 'eregister' | 'lic' | 'unknown';
+  type: 'newindia' | 'newindia-premium' | 'newindia-schedule' | 'tmi' | 'eregister' | 'lic' | 'unknown';
   confidence: number;
 }> {
+  // New India single "Policy Schedule" (one policy, carries previous policy no).
+  if (looksLikeNewIndiaPolicySchedule(text)) {
+    console.log('[register] Detected: New India Policy Schedule (single policy)');
+    const rows = parseNewIndiaPolicySchedule(text);
+    return { rows, type: 'newindia-schedule', confidence: 0.95 };
+  }
+
   // New India "Premium And Commission Bill Report" (text-based, deterministic).
   // Checked before the Policy Expiry Register since both are New India but have
   // distinct headers.

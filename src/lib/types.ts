@@ -104,6 +104,12 @@ export interface RegisterRow {
   /** Policy holder type, e.g. "Individual" / "Organizational" (New India premium bill). */
   policy_holder_type?: string | null;
   policy_number: string | null;
+  /**
+   * Previous/expiring policy number this policy renews (from a policy schedule).
+   * Used to auto-map a renewal to the same client that already holds the
+   * previous policy, even if the name is written differently.
+   */
+  previous_policy_number?: string | null;
   /** "Plan" column, e.g. 165/35/35. */
   policy_type: string | null;
   /** Product name like "New India Mediclaim Policy". */
