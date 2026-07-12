@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2 } from "lucide-react";
-import { money, shortDate } from "@/lib/format";
+import { money, shortDate, companyLabel } from "@/lib/format";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
 import { downloadClientPdf } from "@/lib/clientPdf";
@@ -210,7 +210,7 @@ export function ClientDetail({
                         )}
                       </p>
                       <p className="text-sm text-muted">
-                        {p.company || "—"} · Policy #{p.policy_number || "No number"}
+                        {companyLabel(p.company, p.product_name) || "—"} · Policy #{p.policy_number || "No number"}
                         {p.policy_type && p.product_name && p.product_name !== p.policy_type && (
                           <span className="ml-2">· {p.policy_type}</span>
                         )}

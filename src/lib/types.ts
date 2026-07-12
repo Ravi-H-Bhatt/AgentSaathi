@@ -99,6 +99,8 @@ export interface RegisterRow {
   client_name: string | null;
   client_phone: string | null;
   client_address: string | null;
+  /** Insurer / company name, e.g. "New India". Set by format-specific parsers. */
+  company?: string | null;
   policy_number: string | null;
   /** "Plan" column, e.g. 165/35/35. */
   policy_type: string | null;

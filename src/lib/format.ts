@@ -3,6 +3,22 @@ export function money(n: number | null | undefined): string {
   return "₹" + Number(n).toLocaleString("en-IN");
 }
 
+/**
+ * Resolve the insurer/company name for a policy.
+ * Prefers the stored company; otherwise infers it from the product name so
+ * existing rows (imported before company was captured) still show correctly.
+ * New India registers use products like "New India Mediclaim Policy".
+ */
+export function companyLabel(
+  company: string | null | undefined,
+  productName?: string | null
+): string | null {
+  if (company && company.trim()) return company.trim();
+  const p = (productName || "").trim();
+  if (/new\s*india/i.test(p)) return "New India";
+  return null;
+}
+
 export function shortDate(d: string | null | undefined): string {
   if (!d) return "—";
   const date = new Date(d);

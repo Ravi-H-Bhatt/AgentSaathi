@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
       return {
         agent_id: ownerId,
         client_id: clientId,
-        company: null as string | null,
+        company: r.company ?? null,
         policy_type: r.policy_type,
         product_name: r.product_name || null,
         client_address: r.client_address || null,

@@ -111,7 +111,8 @@ function extractColumn(
       'From', 'Party', 'Report', 'Page', 'Insured Name',
       'Insured Address', 'Line 1', 'Line 2', 'Line 3',
       'THE NEW INDIA ASSURANCE COMPANY LTD.', 'Mahatma Gandhi Road',
-      'Website:', 'http://www.newindia.co.in', 'Party Name :'
+      'Website:', 'http://www.newindia.co.in', 'Party Name :',
+      'Grand', 'Total', 'Grand Total'
     ];
     return headers.some(h => str.includes(h));
   };
@@ -247,8 +248,12 @@ function extractRecord(
   const premiumRaw = extractColumn(items, COLUMNS.gross_premium, yStart, yEnd);
   const taxRaw = extractColumn(items, COLUMNS.service_tax, yStart, yEnd);
   
-  // Extract pure 18-26 digit policy number (no colons, no spaces)
-  const policyNumber = policyNumberRaw.replace(/[:\s]/g, '').match(/\d{18,26}/)?.[0] || null;
+  // Extract pure policy number. In this format the number is ALWAYS followed by
+  // a colon (e.g. "21060034249500005381:"). Take only the part BEFORE the first
+  // colon so trailing values (like the Grand Total "49" on the last row) can't
+  // glue onto it. New India numbers are 18-22 digits.
+  const beforeColon = policyNumberRaw.split(':')[0].replace(/\s/g, '');
+  const policyNumber = beforeColon.match(/\d{18,26}/)?.[0] || null;
   
   if (!policyNumber) return null;
   
@@ -307,6 +312,7 @@ function extractRecord(
     client_name: cleanName || null,
     client_phone: phoneMatch ? phoneMatch[0] : null,
     client_address: fullAddress,
+    company: "New India", // every policy in this register is New India Assurance
     start_date: startDate,
     renewal_date: renewalDate,
     policy_type: lobDescription || null,
