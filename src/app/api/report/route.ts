@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor } from "@/lib/team";
+import { sendPushToAgent } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -31,66 +32,35 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   
-  // Send push notification to admin
+  // Send push notification to every approved admin (across all their devices).
+  // Uses the shared, correctly-configured web-push helper so the payload shape
+  // matches the service worker (which reads `url` at the top level) and dead
+  // subscriptions are pruned automatically.
   try {
     const { data: admins } = await db
       .from("agents")
       .select("id")
       .eq("role", "admin")
       .eq("status", "approved");
-    
-    if (admins && admins.length > 0) {
-      const { data: subscriptions } = await db
-        .from("push_subscriptions")
-        .select("*")
-        .in("agent_id", admins.map(a => a.id));
-      
-      if (subscriptions && subscriptions.length > 0) {
-        const webpush = await import("web-push");
-        
-        // Configure web-push
-        webpush.setVapidDetails(
-          "mailto:admin@agentsaathi.com",
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-          process.env.VAPID_PRIVATE_KEY!
-        );
-        
-        const payload = JSON.stringify({
-          title: "New Error Report",
-          body: `${agent.full_name || agent.email}: ${message.slice(0, 100)}`,
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
-          tag: "error-report",
-          data: { url: "/admin/reports" },
-        });
-        
-        // Send to all admin subscriptions
-        await Promise.all(
-          subscriptions.map((sub) =>
-            webpush.sendNotification(
-              {
-                endpoint: sub.endpoint,
-                keys: {
-                  p256dh: sub.p256dh,
-                  auth: sub.auth,
-                },
-              },
-              payload
-            ).catch((err) => {
-              console.error("[report] Push notification failed:", err);
-              // Delete invalid subscription
-              if (err.statusCode === 410) {
-                db.from("push_subscriptions").delete().eq("id", sub.id);
-              }
-            })
-          )
-        );
-      }
+
+    const reporter = agent.full_name || agent.email;
+    let sent = 0;
+    for (const a of admins || []) {
+      const res = await sendPushToAgent(a.id, {
+        title: "🚨 New issue reported",
+        body: `${reporter}: ${message.trim().slice(0, 120)}`,
+        url: "/admin/reports",
+        tag: "error-report",
+      });
+      sent += res.sent;
     }
+    console.log(
+      `[report] admin push: ${admins?.length || 0} admin(s), ${sent} device(s) notified`
+    );
   } catch (err) {
     console.error("[report] Failed to send admin notification:", err);
     // Don't fail the request if notification fails
   }
-  
+
   return NextResponse.json({ ok: true });
 }

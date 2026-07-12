@@ -236,6 +236,11 @@ export async function POST(request: NextRequest) {
         start_date: r.start_date,
         renewal_date: r.renewal_date,
         source_file_path: body.source_file_path || null,
+        // Extra extracted fields with no dedicated column are kept in raw_extract
+        // (JSON) so nothing is lost — e.g. policy holder type (Individual/Org).
+        raw_extract: r.policy_holder_type
+          ? { policy_holder_type: r.policy_holder_type }
+          : null,
       };
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);

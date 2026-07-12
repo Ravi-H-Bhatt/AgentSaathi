@@ -17,6 +17,15 @@ export default async function ClientsPage() {
     // Get most recent address from policies (first policy has most recent renewal_date due to ordering)
     const mostRecentAddress = c.policies.find(p => p.client_address)?.client_address || null;
     
+    // Everything a client's policies can be searched by (type, product, insurer).
+    const policyMeta = Array.from(
+      new Set(
+        c.policies
+          .flatMap((p) => [p.policy_type, p.product_name, p.company])
+          .filter((v): v is string => !!v)
+      )
+    );
+
     return {
       id: c.id,
       full_name: c.full_name,
@@ -27,6 +36,7 @@ export default async function ClientsPage() {
       policyNumbers: c.policies
         .map((p) => p.policy_number)
         .filter((n): n is string => !!n),
+      policyMeta,
     };
   });
 

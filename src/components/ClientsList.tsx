@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Search, ChevronRight } from "lucide-react";
+import { Search, ChevronRight, X } from "lucide-react";
 
 interface Row {
   id: string;
@@ -13,10 +13,36 @@ interface Row {
   address: string | null;
   policyCount: number;
   policyNumbers: string[];
+  /** Searchable policy metadata: policy types, product names, insurers. */
+  policyMeta?: string[];
 }
+
+// Persist the search term so it survives page refresh and back-navigation
+// (e.g. open a client, then tap "← All clients" — the search stays put).
+const STORAGE_KEY = "clients-search-q";
 
 export function ClientsList({ clients }: { clients: Row[] }) {
   const [q, setQ] = useState("");
+
+  // Restore any previously typed search once, on mount (client-only to avoid
+  // SSR hydration mismatch).
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (saved) setQ(saved);
+    } catch {
+      /* storage unavailable — ignore */
+    }
+  }, []);
+
+  // Keep the stored value in sync with the input.
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, q);
+    } catch {
+      /* ignore */
+    }
+  }, [q]);
 
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -25,6 +51,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
       (c) =>
         c.full_name.toLowerCase().includes(term) ||
         c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
+        (c.policyMeta || []).some((m) => m.toLowerCase().includes(term)) ||
         (c.email || "").toLowerCase().includes(term) ||
         (c.phone || "").toLowerCase().includes(term) ||
         (c.address || "").toLowerCase().includes(term)
@@ -52,10 +79,25 @@ export function ClientsList({ clients }: { clients: Row[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, policy number, address, phone, or email…"
-          className="w-full rounded-xl border border-border bg-card pl-11 pr-4 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/10"
+          placeholder="Search by name, policy number, policy type, product, phone, email…"
+          className="w-full rounded-xl border border-border bg-card pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-foreground/10"
         />
+        {q && (
+          <button
+            type="button"
+            onClick={() => setQ("")}
+            aria-label="Clear search"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
+      {q.trim() && (
+        <p className="text-xs text-muted -mt-2 px-1">
+          {filtered.length} {filtered.length === 1 ? "match" : "matches"} for “{q.trim()}”
+        </p>
+      )}
 
       {filtered.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card py-16 text-center text-muted text-sm">

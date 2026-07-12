@@ -1,5 +1,6 @@
 import type { RegisterRow } from "@/lib/types";
 import { looksLikeNewIndiaRegister, parseNewIndiaRegister } from "./newindia";
+import { looksLikeNewIndiaPremiumBill, parseNewIndiaPremiumBill } from "./newindia-premium";
 import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
 import { looksLikeERegister, parseERegister } from "./eregister-parser";
 
@@ -22,9 +23,18 @@ import { looksLikeERegister, parseERegister } from "./eregister-parser";
  */
 export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<{ 
   rows: RegisterRow[]; 
-  type: 'newindia' | 'tmi' | 'eregister' | 'lic' | 'unknown';
+  type: 'newindia' | 'newindia-premium' | 'tmi' | 'eregister' | 'lic' | 'unknown';
   confidence: number;
 }> {
+  // New India "Premium And Commission Bill Report" (text-based, deterministic).
+  // Checked before the Policy Expiry Register since both are New India but have
+  // distinct headers.
+  if (looksLikeNewIndiaPremiumBill(text)) {
+    console.log('[register] Detected: New India Premium And Commission Bill Report');
+    const rows = parseNewIndiaPremiumBill(text);
+    return { rows, type: 'newindia-premium', confidence: 0.95 };
+  }
+
   // Check New India first (most distinctive: 20-25 digit policy numbers)
   if (looksLikeNewIndiaRegister(text)) {
     console.log('[register] Detected: New India Assurance Policy Expiry Register');
