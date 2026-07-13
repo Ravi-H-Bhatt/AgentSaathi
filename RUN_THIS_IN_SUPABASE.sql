@@ -2,6 +2,9 @@
 -- RUN THIS SQL IN SUPABASE DASHBOARD → SQL EDITOR
 -- ============================================================
 
+-- 📱 Agent phone number (used as the "(M)" mobile in intimation emails).
+alter table public.agents add column if not exists phone text;
+
 -- 🔧 Maintenance / "Work in Progress" mode toggle (single-row settings table)
 create table if not exists public.app_settings (
   id boolean primary key default true,

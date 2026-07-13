@@ -30,6 +30,7 @@ export function AppShell({
   children,
   agentName,
   agentEmail,
+  agentPhone,
   agentId,
   isColleague,
   permissions,
@@ -40,6 +41,7 @@ export function AppShell({
   children: React.ReactNode;
   agentName: string;
   agentEmail: string;
+  agentPhone: string | null;
   agentId: string;
   isColleague: boolean;
   permissions: Permissions;
@@ -181,6 +183,8 @@ export function AppShell({
         </div>
         <ProfileEditor
           currentName={displayName}
+          currentPhone={agentPhone ?? ""}
+          isColleague={isColleague}
           onUpdate={(newName) => setDisplayName(newName)}
         />
         <NotificationToggle />

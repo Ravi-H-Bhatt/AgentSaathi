@@ -35,6 +35,7 @@ export default async function AppLayout({
     <AppShell
       agentName={agent.full_name || agent.email}
       agentEmail={agent.email}
+      agentPhone={agent.phone}
       agentId={agent.id}
       isColleague={isColleague(agent)}
       permissions={permissionsFor(agent)}

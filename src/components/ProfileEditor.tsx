@@ -6,14 +6,19 @@ import { User, Save, X } from "lucide-react";
 
 export function ProfileEditor({
   currentName,
+  currentPhone = "",
+  isColleague = false,
   onUpdate,
 }: {
   currentName: string;
+  currentPhone?: string;
+  isColleague?: boolean;
   onUpdate: (newName: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [name, setName] = useState(currentName);
+  const [phone, setPhone] = useState(currentPhone);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,10 +47,14 @@ export function ProfileEditor({
     setSaving(true);
     setError(null);
     try {
+      const payload: { full_name: string; phone?: string } = { full_name: trimmed };
+      // Only agents (not colleagues) can update their phone.
+      if (!isColleague) payload.phone = phone.trim();
+      
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ full_name: trimmed }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to update");
@@ -63,6 +72,7 @@ export function ProfileEditor({
     <button
       onClick={() => {
         setName(currentName);
+        setPhone(currentPhone);
         setIsOpen(true);
       }}
       className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted hover:bg-black/[.04] hover:text-foreground transition"
@@ -119,6 +129,26 @@ export function ProfileEditor({
                     This name will appear in email signatures.
                   </p>
                 </div>
+
+                {!isColleague && (
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Phone number</label>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="e.g. 9825397474"
+                      className="w-full px-3 py-2.5 text-sm border border-border rounded-lg outline-none focus:ring-2 focus:ring-foreground/10 focus:border-foreground transition"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !saving) handleSave();
+                      }}
+                    />
+                    <p className="text-xs text-muted mt-1.5">
+                      Used as the (M) mobile number in mediclaim intimation emails.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-1">
                   <button

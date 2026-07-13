@@ -19,6 +19,8 @@ export interface Agent {
   id: string;
   email: string;
   full_name: string | null;
+  /** Agent's mobile number, shown as the "(M)" line in intimation emails. */
+  phone: string | null;
   avatar_url: string | null;
   role: Role;
   status: AgentStatus;

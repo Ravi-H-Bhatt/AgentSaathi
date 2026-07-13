@@ -79,6 +79,7 @@ function normalizeAgent(row: unknown): Agent | null {
   return {
     ...(r as object),
     parent_agent_id: (r.parent_agent_id as string) ?? null,
+    phone: (r.phone as string) ?? null,
     permissions:
       r.permissions && typeof r.permissions === "object"
         ? (r.permissions as Agent["permissions"])

@@ -27,7 +27,8 @@ function buildIntimation(
   clientName: string,
   clientPhone: string | null,
   sumInsured: number | null,
-  agentName: string
+  agentName: string,
+  agentPhone?: string | null
 ): { webUrl: string; subject: string; body: string } {
   const today = dmy(new Date().toISOString());
   const period =
@@ -54,7 +55,7 @@ function buildIntimation(
     "",
     "Regards,",
     agentName,
-    "(M) ",
+    agentPhone ? `(M) ${agentPhone}` : "(M) ",
   ].join("\n");
 
   const webUrl =
@@ -104,12 +105,14 @@ export function ClientDetail({
   client,
   agentName,
   agentEmail,
+  agentPhone,
   projections,
   canDelete = false,
 }: {
   client: ClientWithPolicies;
   agentName: string;
   agentEmail?: string;
+  agentPhone?: string | null;
   projections: PremiumProjection[];
   canDelete?: boolean;
 }) {
@@ -348,7 +351,8 @@ export function ClientDetail({
                             client.full_name,
                             client.phone,
                             p.sum_insured,
-                            agentName
+                            agentName,
+                            agentPhone
                           );
                           openIntimation(webUrl, subject, body);
                         }}

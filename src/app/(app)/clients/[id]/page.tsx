@@ -25,6 +25,20 @@ export default async function ClientPage({
   const charts = await getPremiumCharts();
   const projections = projectPremiumChanges(client, client.policies, charts);
 
+  // For colleagues, use the owning agent's phone in intimation emails (so the
+  // agency number shows in the signature, not the colleague's).
+  let agentPhone = agent.phone;
+  if (agent.parent_agent_id) {
+    const { createClient } = await import("@/lib/supabase/server");
+    const db = await createClient();
+    const { data: owner } = await db
+      .from("agents")
+      .select("phone")
+      .eq("id", agent.parent_agent_id)
+      .single();
+    if (owner?.phone) agentPhone = owner.phone;
+  }
+
   return (
     <div className="space-y-6">
       <Link
@@ -37,6 +51,7 @@ export default async function ClientPage({
         client={client}
         agentName={agent.full_name || agent.email}
         agentEmail={agent.email}
+        agentPhone={agentPhone}
         projections={projections}
         canDelete={!agent.parent_agent_id}
       />
