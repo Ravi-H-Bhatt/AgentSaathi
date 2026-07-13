@@ -109,6 +109,13 @@ export function RenewalsList({
   const [copied, setCopied] = useState<"subject" | "body" | null>(null);
   const [renewingId, setRenewingId] = useState<string | null>(null);
   const [confirmRenewId, setConfirmRenewId] = useState<string | null>(null);
+  // IDs the user just marked renewed — removed from the list immediately
+  // (no reload needed) and kept hidden even if a stale/cached server response
+  // still returns them.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+
+  const visibleRenewals = renewals.filter((r) => !removedIds.has(r.id));
 
   const draft = selected ? buildEmailDraft(selected, agentName) : null;
 
@@ -152,23 +159,35 @@ export function RenewalsList({
         body: JSON.stringify({ policyId }),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Failed to mark as renewed");
       }
-      // Refresh the page to update the renewals list
+      // Remove from the list instantly (no reload). It's also hidden for the
+      // rest of this renewal cycle server-side and returns automatically next
+      // year on the same day/month.
+      setRemovedIds((prev) => new Set(prev).add(policyId));
+      setConfirmRenewId(null);
+      setToast("Marked as renewed — it'll return next year on the same date.");
+      window.setTimeout(() => setToast(null), 4000);
+      // Sync server-rendered counts in the background (no visible reload).
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to mark as renewed");
     } finally {
       setRenewingId(null);
-      setConfirmRenewId(null);
     }
   }
 
   return (
     <>
+      {visibleRenewals.length === 0 && (
+        <p className="px-5 py-10 text-center text-muted text-sm">
+          No renewals in the next 30 days. You&apos;re all caught up.
+        </p>
+      )}
       <ul className="divide-y divide-border">
-        {renewals.map((item) => {
+        <AnimatePresence initial={false}>
+        {visibleRenewals.map((item) => {
           const dleft = daysUntil(item.renewalDate);
           const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
           const isConfirming = confirmRenewId === item.id;
@@ -176,7 +195,13 @@ export function RenewalsList({
           const waLink = buildWhatsAppLink(item, agentName);
           
           return (
-            <li key={item.id} className="flex items-center justify-between px-4 sm:px-5 py-4 gap-2 sm:gap-3 hover:bg-black/[.02] transition-colors">
+            <motion.li
+              key={item.id}
+              layout
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="flex items-center justify-between px-4 sm:px-5 py-4 gap-2 sm:gap-3 hover:bg-black/[.02] transition-colors">
               <Link
                 href={`/clients/${item.clientId}`}
                 className="min-w-0 flex-1 group"
@@ -264,10 +289,26 @@ export function RenewalsList({
                 )}
                 </div>
               </div>
-            </li>
+            </motion.li>
           );
         })}
+        </AnimatePresence>
       </ul>
+
+      {/* Toast: confirmation after marking renewed (auto-dismisses) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-foreground text-background px-4 py-2.5 text-sm font-medium shadow-lg"
+          >
+            <CheckCircle2 size={16} className="text-green-400" />
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Email draft modal */}
       <AnimatePresence>
