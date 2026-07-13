@@ -14,8 +14,8 @@ import type { RegisterRow } from "@/lib/types";
  * We anchor on the distinctive policy number (10 digits + "P" + 9 digits),
  * which makes extraction robust across page breaks.
  *
- * premium = TP Premium + OD Premium (for Health/PA rows TP is 0, OD holds the
- * gross premium; for Motor both can be non-zero).
+ * Premium is intentionally NOT captured for this report (it is split across
+ * TP Premium + OD columns and not requested), so premium is left null.
  */
 
 const MONTHS: Record<string, string> = {
@@ -72,8 +72,6 @@ export function parseUnitedIndiaRegister(text: string): RegisterRow[] {
     const exp = m[4];
     const dept = m[5].replace(/\s+/g, " ").trim();
     const si = money(m[6]);
-    const tp = money(m[7]) || 0;
-    const od = money(m[8]) || 0;
 
     rows.push({
       sn: null,
@@ -87,7 +85,7 @@ export function parseUnitedIndiaRegister(text: string): RegisterRow[] {
       mode: null,
       start_date: isoFromDMonY(eff),
       renewal_date: isoFromDMonY(exp),
-      premium: tp + od,
+      premium: null, // premium intentionally not captured for this report
       sum_insured: si ?? 0,
     });
   }
