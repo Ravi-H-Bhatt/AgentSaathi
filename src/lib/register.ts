@@ -2,6 +2,7 @@ import type { RegisterRow } from "@/lib/types";
 import { looksLikeNewIndiaRegister, parseNewIndiaRegister } from "./newindia";
 import { looksLikeNewIndiaPremiumBill, parseNewIndiaPremiumBill } from "./newindia-premium";
 import { looksLikeNewIndiaPolicySchedule, parseNewIndiaPolicySchedule } from "./newindia-policy";
+import { looksLikeUnitedIndiaRegister, parseUnitedIndiaRegister } from "./unitedindia";
 import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
 import { looksLikeERegister, parseERegister } from "./eregister-parser";
 
@@ -24,9 +25,16 @@ import { looksLikeERegister, parseERegister } from "./eregister-parser";
  */
 export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<{ 
   rows: RegisterRow[]; 
-  type: 'newindia' | 'newindia-premium' | 'newindia-schedule' | 'tmi' | 'eregister' | 'lic' | 'unknown';
+  type: 'newindia' | 'newindia-premium' | 'newindia-schedule' | 'unitedindia' | 'tmi' | 'eregister' | 'lic' | 'unknown';
   confidence: number;
 }> {
+  // United India Insurance "Premium Register" (text-based, deterministic).
+  if (looksLikeUnitedIndiaRegister(text)) {
+    console.log('[register] Detected: United India Insurance Premium Register');
+    const rows = parseUnitedIndiaRegister(text);
+    return { rows, type: 'unitedindia', confidence: 0.95 };
+  }
+
   // New India single "Policy Schedule" (one policy, carries previous policy no).
   if (looksLikeNewIndiaPolicySchedule(text)) {
     console.log('[register] Detected: New India Policy Schedule (single policy)');
