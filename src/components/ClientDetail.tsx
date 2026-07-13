@@ -2,20 +2,114 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2 } from "lucide-react";
+import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send } from "lucide-react";
 import { money, shortDate, companyLabel } from "@/lib/format";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
 import { downloadClientPdf } from "@/lib/clientPdf";
 
+/** Format an ISO date (yyyy-mm-dd) as d/m/yyyy (e.g. "9/10/2025"). */
+function dmy(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const m = String(iso).slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return "";
+  return `${Number(m[3])}/${Number(m[2])}/${m[1]}`;
+}
+
+/**
+ * Build a Gmail compose link for a mediclaim intimation. Opens Gmail web
+ * compose so the email is sent FROM the agent's own signed-in Gmail account
+ * (a real personal send — avoids the spam folder). The agent fills the
+ * remaining blanks (hospital, disease, amount) before sending.
+ */
+function buildIntimation(
+  policy: Policy,
+  clientName: string,
+  clientPhone: string | null,
+  sumInsured: number | null,
+  agentName: string
+): { webUrl: string; subject: string; body: string } {
+  const today = dmy(new Date().toISOString());
+  const period =
+    policy.start_date || policy.renewal_date
+      ? `${dmy(policy.start_date)} to ${dmy(policy.renewal_date)}`
+      : "";
+  const si =
+    sumInsured != null ? "Rs. " + Number(sumInsured).toLocaleString("en-IN") : "";
+
+  const subject = "INTIMATION FOR MEDICLAIM";
+  const body = [
+    "Dear Sir,",
+    "",
+    `1.  Policy No: ${policy.policy_number || ""}`,
+    `2.  Name of the Policy holder: ${clientName}`,
+    `3.  Policy Period: ${period}`,
+    `4.  Name of the hospitalized person: ${clientName}`,
+    `5.  Sum Insured: ${si}`,
+    `6.  Date of the admission in the hospital:  (${today})`,
+    `7.  Name and Address of the hospital: `,
+    `8.  Insured contact no: ${clientPhone || ""}`,
+    `9.  Disease/Reason of Hospitalization: `,
+    `10. Estimated Amount: `,
+    "",
+    "Regards,",
+    agentName,
+    "(M) ",
+  ].join("\n");
+
+  const webUrl =
+    "https://mail.google.com/mail/?view=cm&fs=1&tf=1&to=" +
+    "&su=" +
+    encodeURIComponent(subject) +
+    "&body=" +
+    encodeURIComponent(body);
+
+  return { webUrl, subject, body };
+}
+
+/**
+ * Open the intimation in Gmail:
+ *  - Desktop / Android: open Gmail web compose in a new tab. (On Android the
+ *    Gmail app registers mail.google.com links, so it may open the app.)
+ *  - iOS: try the Gmail app compose scheme, falling back to Gmail web if the
+ *    app isn't installed.
+ * The email is composed FROM the agent's signed-in Gmail account (a real send,
+ * so it won't land in spam).
+ */
+function openIntimation(webUrl: string, subject: string, body: string) {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  if (isIOS) {
+    const appUrl =
+      "googlegmail://co?subject=" +
+      encodeURIComponent(subject) +
+      "&body=" +
+      encodeURIComponent(body);
+    let opened = false;
+    const timer = window.setTimeout(() => {
+      if (!opened) window.location.href = webUrl;
+    }, 900);
+    const onHide = () => {
+      opened = true;
+      window.clearTimeout(timer);
+    };
+    document.addEventListener("visibilitychange", onHide, { once: true });
+    window.location.href = appUrl;
+    return;
+  }
+  window.open(webUrl, "_blank", "noopener,noreferrer");
+}
+
 export function ClientDetail({
   client,
   agentName,
+  agentEmail,
   projections,
   canDelete = false,
 }: {
   client: ClientWithPolicies;
   agentName: string;
+  agentEmail?: string;
   projections: PremiumProjection[];
   canDelete?: boolean;
 }) {
@@ -247,6 +341,23 @@ export function ClientDetail({
                           </button>
                         </>
                       )}
+                      <button
+                        onClick={() => {
+                          const { webUrl, subject, body } = buildIntimation(
+                            p,
+                            client.full_name,
+                            client.phone,
+                            p.sum_insured,
+                            agentName
+                          );
+                          openIntimation(webUrl, subject, body);
+                        }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-blue-600 text-blue-700 hover:bg-blue-600 hover:text-white transition"
+                        title="Draft a mediclaim intimation email (opens Gmail)"
+                      >
+                        <Send size={14} />
+                        Intimation
+                      </button>
                       {client.email && (
                         <button
                           onClick={() => sendReminder(p.id)}

@@ -36,6 +36,7 @@ export default async function ClientPage({
       <ClientDetail
         client={client}
         agentName={agent.full_name || agent.email}
+        agentEmail={agent.email}
         projections={projections}
         canDelete={!agent.parent_agent_id}
       />
