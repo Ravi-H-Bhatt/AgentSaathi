@@ -290,47 +290,8 @@ export async function POST(request: NextRequest) {
     })
     .filter((p): p is NonNullable<typeof p> => p !== null);
 
-  // ---- 4. Pre-fetch existing non-null policy_numbers so we know which rows
-  //         could hit the legacy unique constraint (agent_id, policy_number). ----
-  const existingPolicyNumbers = new Set<string>();
-  {
-    let from = 0;
-    const pageSize = 1000;
-    for (;;) {
-      const { data } = await db
-        .from("policies")
-        .select("policy_number")
-        .eq("agent_id", ownerId)
-        .not("policy_number", "is", null)
-        .range(from, from + pageSize - 1);
-      const batch = (data as { policy_number: string | null }[]) || [];
-      if (batch.length === 0) break;
-      for (const p of batch) if (p.policy_number) existingPolicyNumbers.add(p.policy_number);
-      if (batch.length < pageSize) break;
-      from += pageSize;
-    }
-  }
-
-  // Split rows into SAFE (guaranteed insertable) and RISKY (may collide on the
-  // legacy unique constraint). SAFE = no policy_number (constraint allows NULL)
-  // OR a policy_number not already in the DB and not seen earlier this batch.
-  const numbersSeenThisBatch = new Set<string>();
-  const safeRows: typeof policyRows = [];
-  const riskyRows: typeof policyRows = [];
-  for (const row of policyRows) {
-    const num = row.policy_number;
-    if (!num) {
-      safeRows.push(row); // NULL policy_number never violates the constraint.
-      continue;
-    }
-    if (existingPolicyNumbers.has(num) || numbersSeenThisBatch.has(num)) {
-      riskyRows.push(row); // Would collide → handle individually.
-    } else {
-      numbersSeenThisBatch.add(num);
-      safeRows.push(row);
-    }
-  }
-
+  // With the unique constraint dropped, we can safely bulk-insert everything.
+  // The composite key deduplication (done earlier) already filtered out exact duplicates.
   let created = 0;
   let skippedConflict = 0;
 
@@ -361,30 +322,9 @@ export async function POST(request: NextRequest) {
     created += count ?? chunk.length;
   }
 
-  // Bulk-insert all SAFE rows (this covers every no-number policy + all uniques).
-  for (let i = 0; i < safeRows.length; i += 500) {
-    await insertChunk(safeRows.slice(i, i + 500));
-  }
-
-  // RISKY rows: insert one-by-one. If the constraint still exists they are
-  // skipped safely; once the constraint is dropped they insert fine.
-  for (const row of riskyRows) {
-    let { error: rowErr } = await db.from("policies").insert(row);
-    if (rowErr && (/mode/i.test(rowErr.message) || /policy_holder_type/i.test(rowErr.message)) && /column/i.test(rowErr.message)) {
-      const { mode: _mode, policy_holder_type: _type, ...rest } = row;
-      ({ error: rowErr } = await db.from("policies").insert(rest));
-    }
-    if (rowErr) {
-      console.error('[bulk] Policy insert failed:', {
-        policy_number: row.policy_number,
-        client_id: row.client_id,
-        error: rowErr.message,
-        code: rowErr.code
-      });
-      skippedConflict++;
-    } else {
-      created++;
-    }
+  // Bulk-insert all rows in chunks of 500.
+  for (let i = 0; i < policyRows.length; i += 500) {
+    await insertChunk(policyRows.slice(i, i + 500));
   }
 
   await logActivity(
