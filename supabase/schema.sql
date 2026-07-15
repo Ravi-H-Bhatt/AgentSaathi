@@ -65,6 +65,8 @@ create index if not exists policies_renewal_idx on public.policies (renewal_date
 
 -- Idempotent column add for existing databases (bulk register import: "Mode").
 alter table public.policies add column if not exists mode text;
+-- Policy holder type: Individual, Family, Floater, etc.
+alter table public.policies add column if not exists policy_holder_type text;
 -- Speeds up dedup lookups during bulk import.
 create index if not exists policies_number_idx on public.policies (agent_id, policy_number);
 

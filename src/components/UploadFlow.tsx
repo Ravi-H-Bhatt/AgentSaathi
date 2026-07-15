@@ -457,6 +457,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                   <th className="px-3 py-3 font-semibold w-24">Company</th>
                   <th className="px-3 py-3 font-semibold min-w-[200px]">Address</th>
                   <th className="px-3 py-3 font-semibold min-w-[180px]">Product</th>
+                  <th className="px-3 py-3 font-semibold w-20">Type</th>
                   <th className="px-3 py-3 font-semibold w-14">Mode</th>
                   <th className="px-3 py-3 font-semibold text-right w-24">Premium</th>
                   <th className="px-3 py-3 font-semibold text-right w-24">Sum Ass.</th>
@@ -490,6 +491,13 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                       {r.product_name && r.policy_type && (
                         <div className="text-muted text-[10px] mt-0.5">{r.policy_type}</div>
                       )}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      {r.policy_holder_type ? (
+                        <span className="inline-block text-xs font-medium px-1.5 py-0.5 rounded bg-green-50 text-green-700 border border-green-200">
+                          {r.policy_holder_type}
+                        </span>
+                      ) : "—"}
                     </td>
                     <td className="px-3 py-2.5">
                       {r.mode ? (
