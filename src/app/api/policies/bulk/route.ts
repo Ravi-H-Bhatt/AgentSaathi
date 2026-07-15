@@ -181,6 +181,7 @@ export async function POST(request: NextRequest) {
       r.policy_number &&
       clientIdByPolicyNumber.has(String(r.policy_number).trim())
     ) {
+      console.log('[bulk] Skipping renewal with existing current policy:', r.policy_number);
       return false;
     }
     const key = rowKey(
@@ -193,9 +194,20 @@ export async function POST(request: NextRequest) {
       r.start_date,
       r.renewal_date
     );
-    return !existingKeys.has(key);
+    const isDuplicate = existingKeys.has(key);
+    if (isDuplicate) {
+      console.log('[bulk] Skipping duplicate:', {
+        name: r.client_name,
+        policy: r.policy_number,
+        premium: r.premium,
+        key: key.substring(0, 100)
+      });
+    }
+    return !isDuplicate;
   });
   const duplicates = valid.length - toImport.length;
+  
+  console.log(`[bulk] Filtered: ${toImport.length} to import, ${duplicates} duplicates out of ${valid.length} valid`);
 
   if (toImport.length === 0) {
     return NextResponse.json({
@@ -295,6 +307,8 @@ export async function POST(request: NextRequest) {
   let created = 0;
   let skippedConflict = 0;
 
+  console.log(`[bulk] Starting insert of ${policyRows.length} policy rows`);
+
   // Helper: insert a chunk, transparently retrying without `mode` or `policy_holder_type` if those
   // columns don't exist yet, and falling back to row-by-row on any conflict.
   async function insertChunk(chunk: typeof policyRows): Promise<void> {
@@ -302,11 +316,13 @@ export async function POST(request: NextRequest) {
 
     // Handle missing mode/policy_holder_type columns gracefully
     if (error && (/mode/i.test(error.message) || /policy_holder_type/i.test(error.message)) && /column/i.test(error.message)) {
+      console.log('[bulk] Column missing, retrying without mode/policy_holder_type');
       const chunkNoExtra = chunk.map(({ mode: _mode, policy_holder_type: _type, ...rest }) => rest);
       ({ error, count } = await db.from("policies").insert(chunkNoExtra, { count: "exact" }));
     }
 
     if (error) {
+      console.error('[bulk] Chunk insert failed, falling back to row-by-row:', error.message);
       // Fall back to row-by-row so one bad row never blocks the rest.
       for (const row of chunk) {
         let { error: rowErr } = await db.from("policies").insert(row);
@@ -314,18 +330,31 @@ export async function POST(request: NextRequest) {
           const { mode: _mode, policy_holder_type: _type, ...rest } = row;
           ({ error: rowErr } = await db.from("policies").insert(rest));
         }
-        if (rowErr) skippedConflict++;
-        else created++;
+        if (rowErr) {
+          console.error('[bulk] Row insert failed:', {
+            policy_number: row.policy_number,
+            client_id: row.client_id,
+            error: rowErr.message,
+            code: rowErr.code,
+            hint: rowErr.hint
+          });
+          skippedConflict++;
+        } else {
+          created++;
+        }
       }
       return;
     }
     created += count ?? chunk.length;
+    console.log(`[bulk] Inserted chunk: ${count ?? chunk.length} policies`);
   }
 
   // Bulk-insert all rows in chunks of 500.
   for (let i = 0; i < policyRows.length; i += 500) {
     await insertChunk(policyRows.slice(i, i + 500));
   }
+  
+  console.log(`[bulk] Final result: ${created} created, ${skippedConflict} skipped`);
 
   await logActivity(
     agent,

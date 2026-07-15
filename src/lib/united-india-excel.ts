@@ -110,5 +110,14 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
   }
   
   console.log(`[united-india-excel] Parsed ${rows.length} policies`);
+  
+  // Log first 3 for debugging
+  if (rows.length > 0) {
+    console.log('[united-india-excel] Sample rows:');
+    rows.slice(0, 3).forEach((r, i) => {
+      console.log(`  ${i + 1}. ${r.client_name} | Policy: ${r.policy_number} | Premium: ${r.premium} | Renewal: ${r.renewal_date}`);
+    });
+  }
+  
   return rows;
 }
