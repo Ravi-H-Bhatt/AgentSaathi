@@ -35,7 +35,10 @@ export async function sendPushToAgent(
   agentId: string,
   payload: PushPayload
 ): Promise<{ sent: number; failed: number }> {
-  if (!ensureWebPush()) return { sent: 0, failed: 0 };
+  if (!ensureWebPush()) {
+    console.log("[push] Web push not configured");
+    return { sent: 0, failed: 0 };
+  }
 
   const db = createAdminClient();
   const { data: subs } = await db
@@ -43,6 +46,7 @@ export async function sendPushToAgent(
     .select("id, endpoint, p256dh, auth")
     .eq("agent_id", agentId);
 
+  console.log(`[push] Found ${subs?.length || 0} subscriptions for agent ${agentId}`);
   if (!subs || subs.length === 0) return { sent: 0, failed: 0 };
 
   let sent = 0;
@@ -52,6 +56,7 @@ export async function sendPushToAgent(
   await Promise.all(
     subs.map(async (s) => {
       try {
+        console.log(`[push] Sending to endpoint: ${s.endpoint.substring(0, 50)}...`);
         await webpush.sendNotification(
           {
             endpoint: s.endpoint,
@@ -59,18 +64,25 @@ export async function sendPushToAgent(
           },
           JSON.stringify(payload)
         );
+        console.log(`[push] Successfully sent notification`);
         sent++;
       } catch (err: unknown) {
+        console.error(`[push] Failed to send notification:`, err);
         failed++;
         const code = (err as { statusCode?: number })?.statusCode;
-        if (code === 404 || code === 410) stale.push(s.id);
+        if (code === 404 || code === 410) {
+          console.log(`[push] Subscription expired (${code}), marking for removal`);
+          stale.push(s.id);
+        }
       }
     })
   );
 
   if (stale.length) {
+    console.log(`[push] Removing ${stale.length} stale subscriptions`);
     await db.from("push_subscriptions").delete().in("id", stale);
   }
 
+  console.log(`[push] Results: ${sent} sent, ${failed} failed`);
   return { sent, failed };
 }

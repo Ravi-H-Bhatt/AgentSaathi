@@ -1,11 +1,14 @@
 /* AgentSaathi service worker — offline shell + push notifications. */
-const CACHE = "agentsaathi-v1";
+const CACHE = "agentsaathi-v2";
 const APP_SHELL = ["/", "/dashboard", "/offline"];
 
 // Pre-cache a minimal shell so the app opens when offline.
 self.addEventListener("install", (event) => {
+  console.log("[SW] Installing service worker...");
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).catch(() => {})
+    caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL)).catch((err) => {
+      console.error("[SW] Cache failed:", err);
+    })
   );
   self.skipWaiting();
 });
@@ -65,21 +68,31 @@ self.addEventListener("fetch", (event) => {
 
 // Show a push notification sent from the server (Web Push).
 self.addEventListener("push", (event) => {
+  console.log("[SW] Push event received:", event);
   let payload = {};
   try {
     payload = event.data ? event.data.json() : {};
-  } catch {
+    console.log("[SW] Push payload:", payload);
+  } catch (err) {
+    console.error("[SW] Failed to parse push data:", err);
     payload = { title: "AgentSaathi", body: event.data ? event.data.text() : "" };
   }
   const title = payload.title || "AgentSaathi";
   const options = {
-    body: payload.body || "",
+    body: payload.body || "You have a new notification",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
     data: { url: payload.url || "/dashboard" },
     tag: payload.tag || undefined,
+    requireInteraction: false,
+    vibrate: [200, 100, 200],
   };
-  event.waitUntil(self.registration.showNotification(title, options));
+  console.log("[SW] Showing notification:", title, options);
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+      .then(() => console.log("[SW] Notification shown successfully"))
+      .catch((err) => console.error("[SW] Failed to show notification:", err))
+  );
 });
 
 // Focus/open the app when a notification is clicked.

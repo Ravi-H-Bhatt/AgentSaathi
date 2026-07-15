@@ -13,10 +13,11 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",
-    orientation: "portrait",
+    orientation: "portrait-primary",
     background_color: "#ffffff",
     theme_color: "#0a0a0a",
     categories: ["business", "finance", "productivity"],
+    // iOS requires specific icon configurations
     icons: [
       {
         src: "/icon-192.png",
@@ -38,5 +39,9 @@ export default function manifest(): MetadataRoute.Manifest {
         purpose: "maskable",
       },
     ],
+    // Better iOS PWA support
+    dir: "ltr",
+    lang: "en",
+    prefer_related_applications: false,
   };
 }
