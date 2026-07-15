@@ -384,6 +384,9 @@ export function ClientDetail({
                     />
                     <Field label="Start" value={shortDate(p.start_date)} />
                     <Field label="Renewal" value={shortDate(p.renewal_date)} />
+                    {p.policy_holder_type && (
+                      <Field label="Insured Type" value={p.policy_holder_type} />
+                    )}
                   </dl>
                   {p.client_address && (
                     <div className="mt-3 pt-3 border-t border-border">
