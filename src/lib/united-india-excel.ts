@@ -91,15 +91,21 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
     if (!insuredName || !policyNumber) continue;
     
     rows.push({
+      sn: null,
       client_name: insuredName,
+      client_phone: null,
+      client_address: null,
       policy_number: policyNumber,
       policy_type: departmentName || 'Health',
       policy_holder_type: insuredType,
+      product_name: null,
       company: 'UNITED INDIA',
+      mode: null,
       renewal_date: expiryDate,
       premium: premium,
       sum_insured: null,
       start_date: '',
+      previous_policy_number: null,
     });
   }
   
