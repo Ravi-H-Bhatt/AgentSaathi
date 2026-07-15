@@ -374,8 +374,17 @@ export async function POST(request: NextRequest) {
       const { mode: _mode, policy_holder_type: _type, ...rest } = row;
       ({ error: rowErr } = await db.from("policies").insert(rest));
     }
-    if (rowErr) skippedConflict++;
-    else created++;
+    if (rowErr) {
+      console.error('[bulk] Policy insert failed:', {
+        policy_number: row.policy_number,
+        client_id: row.client_id,
+        error: rowErr.message,
+        code: rowErr.code
+      });
+      skippedConflict++;
+    } else {
+      created++;
+    }
   }
 
   await logActivity(
