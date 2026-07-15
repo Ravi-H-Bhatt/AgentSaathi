@@ -104,7 +104,7 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
       renewal_date: expiryDate,
       premium: premium,
       sum_insured: null,
-      start_date: '',
+      start_date: null,  // ← Changed from '' to null
       previous_policy_number: null,
     });
   }
