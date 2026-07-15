@@ -36,8 +36,14 @@ export async function POST(request: NextRequest) {
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-    if (file.type !== "application/pdf") {
-      return NextResponse.json({ error: "Only PDF files are supported" }, { status: 400 });
+    
+    const isExcel = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+                    file.type === "application/vnd.ms-excel" ||
+                    file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isPdf = file.type === "application/pdf";
+    
+    if (!isPdf && !isExcel) {
+      return NextResponse.json({ error: "Only PDF and Excel files are supported" }, { status: 400 });
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -47,9 +53,10 @@ export async function POST(request: NextRequest) {
     // Store original under {ownerId}/{timestamp}-{filename}
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const path = `${ownerId}/${Date.now()}-${safeName}`;
+    const contentType = isExcel ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "application/pdf";
     const { error: upErr } = await db.storage
       .from("policy-files")
-      .upload(path, bytes, { contentType: "application/pdf", upsert: false });
+      .upload(path, bytes, { contentType, upsert: false });
 
     if (upErr) {
       return NextResponse.json(
@@ -60,7 +67,37 @@ export async function POST(request: NextRequest) {
 
     await logActivity(agent, "upload_policy", file.name);
 
-    // Extract text layer.
+    // Handle Excel files
+    if (isExcel) {
+      try {
+        const { parseUnitedIndiaExcel } = await import('@/lib/united-india-excel');
+        const rows = parseUnitedIndiaExcel(bytes);
+        
+        if (rows.length > 0) {
+          return NextResponse.json({
+            filePath: path,
+            fileName: file.name,
+            scanned: false,
+            mode: "bulk",
+            rowCount: rows.length,
+            rows,
+            registerType: 'united-india-excel',
+            confidence: 1.0,
+          });
+        } else {
+          return NextResponse.json({
+            error: "No valid policy data found in Excel file",
+          }, { status: 400 });
+        }
+      } catch (err: any) {
+        console.error('[extract] Excel parsing error:', err);
+        return NextResponse.json({
+          error: `Failed to parse Excel: ${err.message}`,
+        }, { status: 500 });
+      }
+    }
+
+    // Extract text layer from PDF
     const text = await extractPdfText(bytes);
 
     if (!text || text.length < 20) {
