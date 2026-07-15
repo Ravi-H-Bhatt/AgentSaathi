@@ -271,6 +271,7 @@ export async function POST(request: NextRequest) {
         company: r.company ?? null,
         policy_type: r.policy_type,
         product_name: r.product_name || null,
+        policy_holder_type: r.policy_holder_type || null,
         client_address: r.client_address || null,
         policy_number: r.policy_number,
         sum_insured: r.sum_insured,
@@ -280,18 +281,10 @@ export async function POST(request: NextRequest) {
         renewal_date: r.renewal_date,
         source_file_path: body.source_file_path || null,
         // Extra extracted fields with no dedicated column are kept in raw_extract
-        // (JSON) so nothing is lost — e.g. policy holder type and the previous
-        // policy number this policy renewed.
+        // (JSON) so nothing is lost — e.g. the previous policy number this policy renewed.
         raw_extract:
-          r.policy_holder_type || r.previous_policy_number
-            ? {
-                ...(r.policy_holder_type
-                  ? { policy_holder_type: r.policy_holder_type }
-                  : {}),
-                ...(r.previous_policy_number
-                  ? { previous_policy_number: r.previous_policy_number }
-                  : {}),
-              }
+          r.previous_policy_number
+            ? { previous_policy_number: r.previous_policy_number }
             : null,
       };
     })
@@ -341,22 +334,23 @@ export async function POST(request: NextRequest) {
   let created = 0;
   let skippedConflict = 0;
 
-  // Helper: insert a chunk, transparently retrying without `mode` if that
-  // column doesn't exist yet, and falling back to row-by-row on any conflict.
+  // Helper: insert a chunk, transparently retrying without `mode` or `policy_holder_type` if those
+  // columns don't exist yet, and falling back to row-by-row on any conflict.
   async function insertChunk(chunk: typeof policyRows): Promise<void> {
     let { error, count } = await db.from("policies").insert(chunk, { count: "exact" });
 
-    if (error && /mode/i.test(error.message) && /column/i.test(error.message)) {
-      const chunkNoMode = chunk.map(({ mode: _mode, ...rest }) => rest);
-      ({ error, count } = await db.from("policies").insert(chunkNoMode, { count: "exact" }));
+    // Handle missing mode/policy_holder_type columns gracefully
+    if (error && (/mode/i.test(error.message) || /policy_holder_type/i.test(error.message)) && /column/i.test(error.message)) {
+      const chunkNoExtra = chunk.map(({ mode: _mode, policy_holder_type: _type, ...rest }) => rest);
+      ({ error, count } = await db.from("policies").insert(chunkNoExtra, { count: "exact" }));
     }
 
     if (error) {
       // Fall back to row-by-row so one bad row never blocks the rest.
       for (const row of chunk) {
         let { error: rowErr } = await db.from("policies").insert(row);
-        if (rowErr && /mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
-          const { mode: _mode, ...rest } = row;
+        if (rowErr && (/mode/i.test(rowErr.message) || /policy_holder_type/i.test(rowErr.message)) && /column/i.test(rowErr.message)) {
+          const { mode: _mode, policy_holder_type: _type, ...rest } = row;
           ({ error: rowErr } = await db.from("policies").insert(rest));
         }
         if (rowErr) skippedConflict++;
@@ -376,8 +370,8 @@ export async function POST(request: NextRequest) {
   // skipped safely; once the constraint is dropped they insert fine.
   for (const row of riskyRows) {
     let { error: rowErr } = await db.from("policies").insert(row);
-    if (rowErr && /mode/i.test(rowErr.message) && /column/i.test(rowErr.message)) {
-      const { mode: _mode, ...rest } = row;
+    if (rowErr && (/mode/i.test(rowErr.message) || /policy_holder_type/i.test(rowErr.message)) && /column/i.test(rowErr.message)) {
+      const { mode: _mode, policy_holder_type: _type, ...rest } = row;
       ({ error: rowErr } = await db.from("policies").insert(rest));
     }
     if (rowErr) skippedConflict++;

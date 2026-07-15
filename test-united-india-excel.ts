@@ -12,6 +12,7 @@ rows.slice(0, 3).forEach((r, i) => {
   console.log(`    Policy: ${r.policy_number}`);
   console.log(`    Company: ${r.company}`);
   console.log(`    Type: ${r.policy_type}`);
+  console.log(`    Holder Type: ${r.policy_holder_type}`);
   console.log(`    Renewal: ${r.renewal_date}`);
   console.log(`    Premium: ${r.premium ? '₹' + r.premium.toLocaleString('en-IN') : 'N/A'}`);
   console.log('');

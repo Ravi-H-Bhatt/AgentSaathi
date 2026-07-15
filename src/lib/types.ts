@@ -77,6 +77,7 @@ export interface Policy {
   company: string | null;
   policy_type: string | null;
   product_name: string | null;
+  policy_holder_type: string | null;
   client_address: string | null;
   policy_number: string | null;
   sum_insured: number | null;

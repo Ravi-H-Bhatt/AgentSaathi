@@ -94,6 +94,7 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
       client_name: insuredName,
       policy_number: policyNumber,
       policy_type: departmentName || 'Health',
+      policy_holder_type: insuredType,
       company: 'UNITED INDIA',
       renewal_date: expiryDate,
       premium: premium,
