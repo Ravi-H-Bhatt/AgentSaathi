@@ -78,18 +78,16 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {!colleague && (
-        <Reveal delay={0.08}>
-          <PremiumAnalytics
-            policies={policies.map((p) => ({
-              premium: p.premium,
-              sum_insured: p.sum_insured,
-              renewal_date: p.renewal_date,
-              mode: p.mode,
-            }))}
-          />
-        </Reveal>
-      )}
+      <Reveal delay={0.08}>
+        <PremiumAnalytics
+          policies={policies.map((p) => ({
+            premium: p.premium,
+            sum_insured: p.sum_insured,
+            renewal_date: p.renewal_date,
+            mode: p.mode,
+          }))}
+        />
+      </Reveal>
 
       <Reveal delay={0.1}>
         <section className="rounded-2xl border border-border bg-card overflow-hidden">
