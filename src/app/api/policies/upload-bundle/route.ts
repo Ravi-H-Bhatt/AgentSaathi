@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace, type Workspace } from "@/lib/workspace";
 import { extractPdfText } from "@/lib/pdf";
 import { extractPolicyFromText } from "@/lib/groq";
 import { savePolicyForOwner } from "@/lib/policies";
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
 
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
   const results: FileResult[] = [];
 
   // Process files in parallel (6 at a time for speed without overwhelming Groq).
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
   for (let i = 0; i < files.length; i += BATCH_SIZE) {
     const batch = files.slice(i, i + BATCH_SIZE);
     const batchResults = await Promise.all(
-      batch.map((file) => processFile(file, db, ownerId, category))
+      batch.map((file) => processFile(file, db, ownerId, category, workspace))
     );
     results.push(...batchResults);
   }
@@ -80,7 +82,8 @@ export async function POST(request: NextRequest) {
   await logActivity(
     agent,
     "bundle_upload",
-    `${saved} saved, ${duplicates} duplicates, ${needsReview} to review, ${errors} errors`
+    `${saved} saved, ${duplicates} duplicates, ${needsReview} to review, ${errors} errors`,
+    workspace
   );
 
   return NextResponse.json({
@@ -98,7 +101,8 @@ async function processFile(
   file: File,
   db: ReturnType<typeof createAdminClient>,
   ownerId: string,
-  category: "LIFE" | "GENERAL" | null
+  category: "LIFE" | "GENERAL" | null,
+  workspace: Workspace
 ): Promise<FileResult> {
   try {
     const bytes = Buffer.from(await file.arrayBuffer());
@@ -145,7 +149,7 @@ async function processFile(
 
     // Save to database (client_name is guaranteed to be non-null here)
     const saved = await savePolicyForOwner(ownerId, {
-      client_name: extracted.client_name, // Non-null
+      client_name: extracted.client_name, // Non-null (workspace passed below)
       client_email: extracted.client_email,
       client_phone: extracted.client_phone,
       date_of_birth: extracted.date_of_birth,
@@ -158,7 +162,7 @@ async function processFile(
       start_date: extracted.start_date,
       renewal_date: extracted.renewal_date,
       source_file_path: path,
-    });
+    }, workspace);
 
     return {
       fileName: file.name,

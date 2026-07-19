@@ -3,6 +3,7 @@ import { getCurrentAgent } from "@/lib/auth";
 import { getOpenTimeEntry } from "@/lib/data";
 import { getMaintenance } from "@/lib/settings";
 import { permissionsFor, isColleague } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { AppShell } from "@/components/AppShell";
 
 // Authenticated area depends on the request session — never prerender.
@@ -30,6 +31,7 @@ export default async function AppLayout({
   }
 
   const openEntry = await getOpenTimeEntry(agent.id);
+  const workspace = await getWorkspace();
 
   return (
     <AppShell
@@ -40,6 +42,7 @@ export default async function AppLayout({
       isColleague={isColleague(agent)}
       permissions={permissionsFor(agent)}
       openSince={openEntry?.clock_in ?? null}
+      workspace={workspace}
       maintenanceActive={maintenance.active}
       maintenanceMessage={maintenance.message}
     >

@@ -111,6 +111,30 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // LIC "Premium Due List" — deterministic, highest priority (its own format
+  // and dedup/renewal rules). Detect before the generic register parsers.
+  {
+    const { looksLikeLicPremiumDueList, parseLicPremiumDueList } = await import(
+      "@/lib/lic-premium-due"
+    );
+    if (looksLikeLicPremiumDueList(text)) {
+      const licRows = parseLicPremiumDueList(text);
+      if (licRows.length > 0) {
+        console.log(`[extract] Detected LIC Premium Due List: ${licRows.length} rows`);
+        return NextResponse.json({
+          filePath: path,
+          fileName: file.name,
+          scanned: false,
+          mode: "bulk",
+          rowCount: licRows.length,
+          rows: licRows,
+          registerType: "lic-premium-due",
+          confidence: 1.0,
+        });
+      }
+    }
+  }
+
   // Use auto-detection to parse any supported register type
   const { rows, type, confidence } = await parseRegisterAuto(text, bytes);
   if (rows.length > 0 && confidence >= 0.5) {

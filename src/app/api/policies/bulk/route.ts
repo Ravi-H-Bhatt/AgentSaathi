@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import type { RegisterRow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -52,6 +53,7 @@ export async function POST(request: NextRequest) {
 
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
 
   // Keep only rows that have a client name (policy number is optional in E-Register format).
   const valid = rows.filter((r) => cleanName(r.client_name));
@@ -64,7 +66,8 @@ export async function POST(request: NextRequest) {
     const { data: existingClients } = await db
       .from("clients")
       .select("id, full_name")
-      .eq("agent_id", ownerId);
+      .eq("agent_id", ownerId)
+      .eq("workspace", workspace);
     for (const c of (existingClients as { id: string; full_name: string }[]) || []) {
       const key = nameKey(c.full_name);
       if (!clientIdByKey.has(key)) clientIdByKey.set(key, c.id);
@@ -125,6 +128,7 @@ export async function POST(request: NextRequest) {
           "policy_number, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id"
         )
         .eq("agent_id", ownerId)
+        .eq("workspace", workspace)
         .range(from, from + pageSize - 1);
       const batch = (data as any[]) || [];
       if (batch.length === 0) break;
@@ -248,6 +252,7 @@ export async function POST(request: NextRequest) {
       agent_id: ownerId,
       full_name: displayNameByKey.get(k)!,
       phone: phoneByKey.get(k) || null,
+      workspace,
     }));
 
   let clientsCreated = 0;
@@ -280,6 +285,7 @@ export async function POST(request: NextRequest) {
       return {
         agent_id: ownerId,
         client_id: clientId,
+        workspace,
         company: r.company ?? null,
         policy_type: r.policy_type,
         product_name: r.product_name || null,
@@ -359,7 +365,8 @@ export async function POST(request: NextRequest) {
   await logActivity(
     agent,
     "bulk_import",
-    `${created} policies, ${clientsCreated} new clients`
+    `${created} policies, ${clientsCreated} new clients`,
+    workspace
   );
 
   return NextResponse.json({

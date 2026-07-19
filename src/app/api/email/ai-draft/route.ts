@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor, permissionsFor } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { draftEmailWithAi } from "@/lib/groq";
 import type { Client, Policy } from "@/lib/types";
 
@@ -98,11 +99,12 @@ export async function POST(request: NextRequest) {
   }
 
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
 
   // Load ALL of the agent's data (paginated past the 1000-row cap).
   const [clients, policies] = await Promise.all([
-    getClients(ownerId),
-    getPolicies(ownerId),
+    getClients(ownerId, workspace),
+    getPolicies(ownerId, workspace),
   ]);
 
   const context = buildContext(clients, policies, question);

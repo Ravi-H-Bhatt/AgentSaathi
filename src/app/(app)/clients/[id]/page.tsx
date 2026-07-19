@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClientWithPolicies, getPremiumCharts } from "@/lib/data";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { projectPremiumChanges } from "@/lib/premium";
 import { ClientDetail } from "@/components/ClientDetail";
 
@@ -16,7 +17,8 @@ export default async function ClientPage({
   const agent = (await getCurrentAgent())!;
   if (!permissionsFor(agent).clients) redirect("/dashboard");
   const ownerId = ownerIdFor(agent);
-  const client = await getClientWithPolicies(ownerId, id);
+  const workspace = await getWorkspace();
+  const client = await getClientWithPolicies(ownerId, id, workspace);
   if (!client) notFound();
 
   // Log that this user viewed the client (for the colleagues activity feed).
@@ -53,7 +55,7 @@ export default async function ClientPage({
         agentEmail={agent.email}
         agentPhone={agentPhone}
         projections={projections}
-        canDelete={!agent.parent_agent_id}
+        canDelete={permissionsFor(agent).delete}
       />
     </div>
   );

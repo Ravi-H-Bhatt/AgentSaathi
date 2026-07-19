@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
-import { ownerIdFor, isColleague, logActivity } from "@/lib/team";
+import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import type { Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -33,10 +34,11 @@ export async function DELETE(request: NextRequest) {
   if (!agent || agent.status !== "approved") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  // Colleagues cannot delete clients — only the account owner can.
-  if (isColleague(agent)) {
+  // Deleting requires the "delete" permission (owners always have it;
+  // colleagues only when the owner grants it).
+  if (!permissionsFor(agent).delete) {
     return NextResponse.json(
-      { error: "Colleagues are not allowed to delete clients." },
+      { error: "You don't have permission to delete clients." },
       { status: 403 }
     );
   }
@@ -46,6 +48,7 @@ export async function DELETE(request: NextRequest) {
   const all = url.searchParams.get("all") === "1";
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
 
   if (all) {
     // Clean up all stored files first (paginate past the 1000-row cap so we
@@ -59,6 +62,7 @@ export async function DELETE(request: NextRequest) {
           .from("policies")
           .select("source_file_path")
           .eq("agent_id", ownerId)
+          .eq("workspace", workspace)
           .range(from, from + pageSize - 1);
         const batch = (data as Policy[]) || [];
         allPaths.push(...batch);
@@ -74,16 +78,21 @@ export async function DELETE(request: NextRequest) {
     const { error: polErr } = await db
       .from("policies")
       .delete()
-      .eq("agent_id", ownerId);
+      .eq("agent_id", ownerId)
+      .eq("workspace", workspace);
     if (polErr) {
       return NextResponse.json({ error: polErr.message }, { status: 500 });
     }
 
-    const { error } = await db.from("clients").delete().eq("agent_id", ownerId);
+    const { error } = await db
+      .from("clients")
+      .delete()
+      .eq("agent_id", ownerId)
+      .eq("workspace", workspace);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
-    await logActivity(agent, "delete_all_clients", "Deleted all clients");
+    await logActivity(agent, "delete_all_clients", "Deleted all clients", workspace);
     return NextResponse.json({ ok: true });
   }
 
@@ -100,6 +109,7 @@ export async function DELETE(request: NextRequest) {
     .select("id, full_name")
     .eq("id", id)
     .eq("agent_id", ownerId)
+    .eq("workspace", workspace)
     .maybeSingle();
   if (!client) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
@@ -109,6 +119,7 @@ export async function DELETE(request: NextRequest) {
     .from("policies")
     .select("source_file_path")
     .eq("agent_id", ownerId)
+    .eq("workspace", workspace)
     .eq("client_id", id);
   await removePolicyFiles(db, (policies as Policy[]) || []);
 
@@ -116,7 +127,8 @@ export async function DELETE(request: NextRequest) {
     .from("clients")
     .delete()
     .eq("id", id)
-    .eq("agent_id", ownerId);
+    .eq("agent_id", ownerId)
+    .eq("workspace", workspace);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -124,7 +136,8 @@ export async function DELETE(request: NextRequest) {
   await logActivity(
     agent,
     "delete_client",
-    (client as { full_name: string }).full_name
+    (client as { full_name: string }).full_name,
+    workspace
   );
   return NextResponse.json({ ok: true });
 }

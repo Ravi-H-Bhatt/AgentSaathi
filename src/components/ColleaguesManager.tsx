@@ -47,6 +47,7 @@ interface ActivityRow {
   agentId: string;
   action: string;
   detail: string | null;
+  workspace: string | null;
   createdAt: string;
 }
 
@@ -55,6 +56,7 @@ const PERMISSION_LABELS: { key: keyof Permissions; label: string; desc: string }
   { key: "clients", label: "Clients", desc: "View the client directory & details" },
   { key: "upload", label: "Upload policies", desc: "Add and parse new policy PDFs" },
   { key: "email", label: "Send reminders", desc: "Email renewal reminders to clients" },
+  { key: "delete", label: "Delete", desc: "Delete clients and individual policies" },
 ];
 
 function fmt(d: string | null): string {
@@ -81,8 +83,17 @@ const ACTION_LABEL: Record<string, string> = {
   clock_out: "Clocked out",
   ai_search: "Asked the AI",
   view_client: "Viewed a client",
+  view_document: "Viewed a document",
+  download_document: "Downloaded a document",
   upload_policy: "Uploaded a policy",
+  bundle_upload: "Uploaded policies (bundle)",
+  bulk_import: "Imported a policy register",
+  create_policy_manual: "Added a policy manually",
   send_email: "Sent a reminder",
+  team_chat: "Sent a team message",
+  delete_policy: "Deleted a policy",
+  delete_client: "Deleted a client",
+  delete_all_clients: "Deleted all clients",
 };
 
 export function ColleaguesManager({
@@ -105,6 +116,7 @@ export function ColleaguesManager({
     clients: true,
     upload: true,
     email: true,
+    delete: false,
   });
   const [newLink, setNewLink] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -375,6 +387,11 @@ export function ColleaguesManager({
                         {a.detail ? (
                           <span className="text-muted"> — {a.detail}</span>
                         ) : null}
+                        {a.workspace === "lic" && (
+                          <span className="ml-2 inline-block text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                            LIC
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-muted mt-0.5">{fmt(a.createdAt)}</p>
                     </div>

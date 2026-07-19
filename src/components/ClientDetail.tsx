@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send } from "lucide-react";
 import { money, shortDate, companyLabel } from "@/lib/format";
+import { getLicNextDueISO } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
 import { downloadClientPdf } from "@/lib/clientPdf";
@@ -120,6 +121,7 @@ export function ClientDetail({
   const [sending, setSending] = useState<string | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [deletingPolicy, setDeletingPolicy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(
     null
   );
@@ -170,6 +172,35 @@ export function ClientDetail({
         msg: e instanceof Error ? e.message : "Delete failed.",
       });
       setDeleting(false);
+    }
+  }
+
+  async function deletePolicy(policyId: string, policyLabel: string) {
+    if (
+      !confirm(
+        `Delete "${policyLabel}"? This removes the policy and its stored document. This cannot be undone.`
+      )
+    )
+      return;
+    setDeletingPolicy(policyId);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/policies?id=${policyId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Delete failed");
+      // If that was the client's last policy, the client was removed too.
+      if (data.clientDeleted) {
+        router.push("/clients");
+      }
+      router.refresh();
+    } catch (e) {
+      setNotice({
+        type: "err",
+        msg: e instanceof Error ? e.message : "Delete failed.",
+      });
+      setDeletingPolicy(null);
     }
   }
 
@@ -291,6 +322,17 @@ export function ClientDetail({
           <div className="space-y-3">
             {client.policies.map((p: Policy) => {
               const proj = projByPolicy.get(p.id);
+              // LIC policies (from a Premium Due List) show LIC-specific fields:
+              // D.o.C, Plan/Term, Mode, FUP and the mode-aware next due date.
+              const raw = p.raw_extract as {
+                source?: string;
+                fup?: string;
+                paid_through?: string;
+              } | null;
+              const isLic = raw?.source === "lic_premium_due";
+              const licNextDue = isLic
+                ? getLicNextDueISO(p.start_date, p.mode, undefined, raw?.paid_through)
+                : null;
               return (
                 <div
                   key={p.id}
@@ -372,22 +414,56 @@ export function ClientDetail({
                           {sending === p.id ? "Sending…" : "Remind"}
                         </button>
                       )}
+                      {canDelete && (
+                        <button
+                          onClick={() =>
+                            deletePolicy(
+                              p.id,
+                              p.product_name || p.policy_type || "Policy"
+                            )
+                          }
+                          disabled={deletingPolicy === p.id}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition disabled:opacity-50"
+                          title="Delete this policy"
+                        >
+                          {deletingPolicy === p.id ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
-                    <Field label="Sum insured" value={money(p.sum_insured)} />
-                    <Field
-                      label="Premium"
-                      value={
-                        money(p.premium) + (p.mode ? ` (${p.mode})` : "")
-                      }
-                    />
-                    <Field label="Start" value={shortDate(p.start_date)} />
-                    <Field label="Renewal" value={shortDate(p.renewal_date)} />
-                    {p.policy_holder_type && (
-                      <Field label="Insured Type" value={p.policy_holder_type} />
-                    )}
-                  </dl>
+                  {isLic ? (
+                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
+                      <Field label="D.o.C" value={shortDate(p.start_date)} />
+                      <Field label="Plan / Term" value={p.policy_type || "—"} />
+                      <Field label="Mode" value={p.mode || "—"} />
+                      <Field
+                        label="Premium (installment)"
+                        value={money(p.premium)}
+                      />
+                      <Field label="FUP" value={raw?.fup || "—"} />
+                      <Field label="Next due" value={shortDate(licNextDue)} />
+                    </dl>
+                  ) : (
+                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
+                      <Field label="Sum insured" value={money(p.sum_insured)} />
+                      <Field
+                        label="Premium"
+                        value={
+                          money(p.premium) + (p.mode ? ` (${p.mode})` : "")
+                        }
+                      />
+                      <Field label="Start" value={shortDate(p.start_date)} />
+                      <Field label="Renewal" value={shortDate(p.renewal_date)} />
+                      {p.policy_holder_type && (
+                        <Field label="Insured Type" value={p.policy_holder_type} />
+                      )}
+                    </dl>
+                  )}
                   {p.client_address && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <dt className="text-muted text-xs">Address</dt>

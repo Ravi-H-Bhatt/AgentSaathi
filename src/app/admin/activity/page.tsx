@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentAgent } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { workspaceLabel } from "@/lib/workspace";
 import { Activity } from "lucide-react";
 
 interface ActivityLog {
@@ -9,6 +10,7 @@ interface ActivityLog {
   owner_id: string;
   action: string;
   detail: string | null;
+  workspace: string | null;
   created_at: string;
   agent?: {
     email: string;
@@ -35,6 +37,7 @@ export default async function ActivityLogsPage() {
       owner_id,
       action,
       detail,
+      workspace,
       created_at
     `)
     .order("created_at", { ascending: false })
@@ -82,6 +85,7 @@ export default async function ActivityLogsPage() {
                 <th className="px-4 py-3 font-semibold">Time</th>
                 <th className="px-4 py-3 font-semibold">Actor</th>
                 <th className="px-4 py-3 font-semibold">Owner</th>
+                <th className="px-4 py-3 font-semibold">Workspace</th>
                 <th className="px-4 py-3 font-semibold">Action</th>
                 <th className="px-4 py-3 font-semibold">Details</th>
               </tr>
@@ -89,7 +93,7 @@ export default async function ActivityLogsPage() {
             <tbody className="divide-y divide-border">
               {enrichedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted">
                     No activity logs yet
                   </td>
                 </tr>
@@ -131,6 +135,17 @@ export default async function ActivityLogsPage() {
                         <div className="text-sm">
                           {log.owner?.full_name || log.owner?.email || "—"}
                         </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-block px-2 py-1 rounded-md text-xs font-medium ${
+                            log.workspace === "lic"
+                              ? "bg-purple-100 text-purple-700"
+                              : "bg-black/[.06]"
+                          }`}
+                        >
+                          {workspaceLabel(log.workspace)}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         <span className="inline-block px-2 py-1 rounded-md text-xs font-medium bg-black/[.06]">

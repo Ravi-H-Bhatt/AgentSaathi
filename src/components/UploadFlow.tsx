@@ -4,7 +4,9 @@ import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { UploadCloud, FileText, Loader2, CheckCircle2, Table2, Package } from "lucide-react";
 import type { ExtractedPolicy, RegisterRow } from "@/lib/types";
-import { companyLabel } from "@/lib/format";
+import type { LicDueRow } from "@/lib/lic-premium-due";
+import { companyLabel, shortDate } from "@/lib/format";
+import { getLicNextDueISO } from "@/lib/lic-renewal";
 
 type Step = "idle" | "extracting" | "review" | "bulkReview" | "saving" | "done" | "bundleUploading" | "bundleDone";
 type Category = "LIFE" | "GENERAL" | null;
@@ -45,6 +47,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
 
   // Bulk register state
   const [rows, setRows] = useState<RegisterRow[]>([]);
+  const [registerType, setRegisterType] = useState<string | null>(null);
   const [bulkResult, setBulkResult] = useState<{
     created: number;
     duplicates: number;
@@ -105,6 +108,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
 
       if (data.mode === "bulk" && Array.isArray(data.rows)) {
         setRows(data.rows);
+        setRegisterType(data.registerType || null);
         setStep("bulkReview");
         return;
       }
@@ -212,7 +216,13 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     setStep("saving");
     setError(null);
     try {
-      const res = await fetch("/api/policies/bulk", {
+      // LIC "Premium Due List" uses its own endpoint (dedup by policy number,
+      // mode-aware renewal storage). Everything else uses the generic importer.
+      const endpoint =
+        registerType === "lic-premium-due"
+          ? "/api/policies/lic"
+          : "/api/policies/bulk";
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows, source_file_path: filePath }),
@@ -304,6 +314,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
               setStep("idle");
               setForm(null);
               setRows([]);
+              setRegisterType(null);
               setBulkResult(null);
               setError(null);
               setInfo(null);
@@ -403,6 +414,134 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
             className="px-5 py-2.5 rounded-full border border-border font-medium hover:bg-black/[.03] transition"
           >
             View clients
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- LIC PREMIUM DUE LIST REVIEW (dedicated table: S.No + real columns) ----
+  if (
+    (step === "bulkReview" || step === "saving") &&
+    registerType === "lic-premium-due"
+  ) {
+    const licRows = (rows as LicDueRow[])
+      .slice()
+      .sort((a, b) => (a.sn ?? 0) - (b.sn ?? 0));
+    const uniqueClients = new Set(
+      licRows
+        .filter((r) => r.client_name)
+        .map((r) => r.client_name!.trim().toLowerCase())
+    ).size;
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-2 text-sm">
+          <Table2 size={16} className="text-muted" />
+          {fileName}
+          <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700">
+            LIC Premium Due List
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-2xl font-bold">{licRows.length.toLocaleString("en-IN")}</p>
+            <p className="text-sm text-muted">policies found</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-2xl font-bold">{uniqueClients.toLocaleString("en-IN")}</p>
+            <p className="text-sm text-muted">unique clients</p>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-2xl font-bold">{licRows.length.toLocaleString("en-IN")}</p>
+            <p className="text-sm text-muted">ready to import</p>
+          </div>
+        </div>
+
+        <p className="text-sm text-muted">
+          Dedup is by policy number — each policy is stored once even across
+          monthly reports. Showing all {licRows.length.toLocaleString("en-IN")} rows.
+        </p>
+
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="overflow-x-auto max-h-[560px] overflow-y-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="sticky top-0 bg-card border-b border-border text-left text-xs text-muted uppercase tracking-wide">
+                  <th className="px-3 py-3 font-semibold w-14">S.No</th>
+                  <th className="px-3 py-3 font-semibold w-28">Policy No</th>
+                  <th className="px-3 py-3 font-semibold min-w-[180px]">Name of Assured</th>
+                  <th className="px-3 py-3 font-semibold w-24">D.o.C</th>
+                  <th className="px-3 py-3 font-semibold w-20">Pln/Tm</th>
+                  <th className="px-3 py-3 font-semibold w-24">Mode</th>
+                  <th className="px-3 py-3 font-semibold w-20">FUP</th>
+                  <th className="px-3 py-3 font-semibold text-right w-24">Premium</th>
+                  <th className="px-3 py-3 font-semibold w-24">Next due</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {licRows.map((r, i) => {
+                  const nextDue = getLicNextDueISO(r.start_date, r.mode);
+                  return (
+                    <tr
+                      key={`${r.policy_number}-${i}`}
+                      className={`hover:bg-black/[.02] ${i % 2 === 0 ? "" : "bg-black/[.01]"}`}
+                    >
+                      <td className="px-3 py-2.5 text-xs text-muted tabular-nums">{r.sn ?? "—"}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs">{r.policy_number}</td>
+                      <td className="px-3 py-2.5 font-medium">
+                        {r.client_name || <span className="text-amber-500 text-xs">No name</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted whitespace-nowrap">
+                        {r.start_date ? shortDate(r.start_date) : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">{r.policy_type || "—"}</td>
+                      <td className="px-3 py-2.5">
+                        {r.mode ? (
+                          <span className="inline-block text-xs font-medium px-1.5 py-0.5 rounded bg-black/[.06] whitespace-nowrap">
+                            {r.mode}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted">{r.fup || "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-xs">
+                        {fmtNum(r.premium)}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs whitespace-nowrap">
+                        {nextDue ? shortDate(nextDue) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {error && <p className="text-sm text-red-600">{error}</p>}
+
+        <div className="flex gap-3">
+          <button
+            onClick={importBulk}
+            disabled={step === "saving"}
+            className="px-5 py-2.5 rounded-full bg-foreground text-background font-medium hover:opacity-90 transition disabled:opacity-50 inline-flex items-center gap-2"
+          >
+            {step === "saving" && <Loader2 size={16} className="animate-spin" />}
+            {step === "saving"
+              ? "Importing…"
+              : `Import ${licRows.length.toLocaleString("en-IN")} policies`}
+          </button>
+          <button
+            onClick={() => {
+              setStep("idle");
+              setRows([]);
+              setRegisterType(null);
+            }}
+            disabled={step === "saving"}
+            className="px-5 py-2.5 rounded-full border border-border font-medium hover:bg-black/[.03] transition disabled:opacity-50"
+          >
+            Cancel
           </button>
         </div>
       </div>
@@ -540,6 +679,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
             onClick={() => {
               setStep("idle");
               setRows([]);
+              setRegisterType(null);
             }}
             disabled={step === "saving"}
             className="px-5 py-2.5 rounded-full border border-border font-medium hover:bg-black/[.03] transition disabled:opacity-50"

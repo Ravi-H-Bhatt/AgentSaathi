@@ -3,7 +3,46 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { shortDate, companyLabel } from "@/lib/format";
-import type { ClientWithPolicies } from "@/lib/types";
+import { licModeMonths } from "@/lib/lic-renewal";
+import type { ClientWithPolicies, Policy } from "@/lib/types";
+
+/** True when a policy came from an LIC Premium Due List. */
+function isLicPolicy(p: Policy): boolean {
+  return (p.raw_extract as { source?: string } | null)?.source === "lic_premium_due";
+}
+
+/**
+ * Does a policy have a premium due in a given calendar month (0-11)?
+ *  - LIC: derived from D.o.C month + mode (Monthly → every month, Quarterly →
+ *    every 3rd month from D.o.C, Half-Yearly → every 6th, Yearly → D.o.C month).
+ *  - Others: the stored renewal month (annual).
+ */
+export function policyDueInMonth(p: Policy, month: number): boolean {
+  if (isLicPolicy(p) && p.start_date) {
+    const d = new Date(p.start_date);
+    if (isNaN(d.getTime())) return false;
+    const step = licModeMonths(p.mode) ?? 12;
+    const docMonth = d.getMonth();
+    return (((month - docMonth) % step) + step) % step === 0;
+  }
+  if (!p.renewal_date) return false;
+  const d = new Date(p.renewal_date);
+  return !isNaN(d.getTime()) && d.getMonth() === month;
+}
+
+/** The due date (ISO) shown for a policy in a given month's report. */
+function dueDateForMonth(p: Policy, month: number): string | null {
+  if (isLicPolicy(p) && p.start_date) {
+    const doc = new Date(p.start_date);
+    if (isNaN(doc.getTime())) return p.renewal_date;
+    const year = new Date().getFullYear();
+    const day = doc.getDate();
+    const dim = new Date(year, month + 1, 0).getDate();
+    const d = new Date(year, month, Math.min(day, dim));
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  return p.renewal_date;
+}
 
 /** Money formatter for PDFs. jsPDF's built-in Helvetica has no Rupee glyph (₹),
  *  which renders as garbled spacing, so we use "Rs." with Indian grouping. */
@@ -239,9 +278,7 @@ export function downloadRenewalsByMonthPdf(
 
   for (const c of clients) {
     for (const p of c.policies) {
-      if (!p.renewal_date) continue;
-      const d = new Date(p.renewal_date);
-      if (isNaN(d.getTime()) || d.getMonth() !== month) continue;
+      if (!policyDueInMonth(p, month)) continue;
       rows.push({
         client: c.full_name,
         phone: c.phone || "—",
@@ -250,7 +287,7 @@ export function downloadRenewalsByMonthPdf(
         number: p.policy_number || "—",
         sum: p.sum_insured,
         premium: p.premium,
-        renewal: p.renewal_date,
+        renewal: dueDateForMonth(p, month),
       });
     }
   }

@@ -1,7 +1,9 @@
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor, isColleague } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { money, daysUntil } from "@/lib/format";
+import { licDaysUntil, getLicNextDueISO } from "@/lib/lic-renewal";
 import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
 import { RenewalsList } from "@/components/RenewalsList";
@@ -18,10 +20,22 @@ export default async function DashboardPage() {
   // Colleagues can look up individual clients/policies, but must NOT see
   // aggregate financials (total sum insured, premium analytics).
   const colleague = isColleague(agent);
+  const workspace = await getWorkspace();
+  const isLic = workspace === "lic";
   const [clients, policies] = await Promise.all([
-    getClients(ownerId),
-    getPolicies(ownerId),
+    getClients(ownerId, workspace),
+    getPolicies(ownerId, workspace),
   ]);
+
+  // Renewal day-count is mode-aware in the LIC workspace (counted from the
+  // D.o.C day + Mode: Monthly/Quarterly/Half-Yearly/Yearly), and the classic
+  // annual dd/mm logic on the Home side.
+  const licPaidThrough = (p: Policy): string | null =>
+    (p.raw_extract as { paid_through?: string } | null)?.paid_through ?? null;
+  const dueInDays = (p: Policy): number | null =>
+    isLic
+      ? licDaysUntil(p.start_date, p.mode, undefined, licPaidThrough(p))
+      : daysUntil(p.renewal_date);
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
 
@@ -36,14 +50,19 @@ export default async function DashboardPage() {
     .filter((p) => {
       // Hide if marked renewed within the current cycle (~330 days).
       // The marker lives in raw_extract.renewed_at (no schema change needed).
-      const renewedAt = (p.raw_extract as { renewed_at?: string } | null)?.renewed_at;
-      if (renewedAt) {
-        const t = new Date(renewedAt).getTime();
-        if (!isNaN(t) && nowMs - t < RENEWED_HIDE_MS) return false;
+      // The 330-day "renewed" hide is for annual (Home) policies only. LIC
+      // uses anchor advancement (mark-renewed moves to the next cycle), so it
+      // must NOT be hidden for a year.
+      if (!isLic) {
+        const renewedAt = (p.raw_extract as { renewed_at?: string } | null)?.renewed_at;
+        if (renewedAt) {
+          const t = new Date(renewedAt).getTime();
+          if (!isNaN(t) && nowMs - t < RENEWED_HIDE_MS) return false;
+        }
       }
       return true;
     })
-    .map((p) => ({ p, d: daysUntil(p.renewal_date) }))
+    .map((p) => ({ p, d: dueInDays(p) }))
     .filter(({ d }) => d != null && d >= -5 && d <= 30)
     .sort((a, b) => (a.d as number) - (b.d as number))
     .map(({ p }) => p);
@@ -119,6 +138,13 @@ export default async function DashboardPage() {
                   premium: p.premium,
                   renewalDate: p.renewal_date,
                   mode: p.mode,
+                  // LIC: pass the mode-aware next-due date + day count so the
+                  // list shows the correct upcoming installment (not an annual
+                  // recurrence). Home leaves these undefined and uses dd/mm.
+                  nextDueDate: isLic
+                    ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
+                    : undefined,
+                  daysLeft: isLic ? dueInDays(p) : undefined,
                 };
               })} />
           )}

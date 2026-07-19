@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
-import { ownerIdFor } from "@/lib/team";
+import { ownerIdFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import type { Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -26,11 +27,13 @@ export async function GET(request: NextRequest) {
 
   const db = createAdminClient();
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
   const { data: policy } = await db
     .from("policies")
     .select("id, source_file_path, policy_number")
     .eq("id", policyId)
     .eq("agent_id", ownerId)
+    .eq("workspace", workspace)
     .maybeSingle();
 
   const p = policy as Pick<Policy, "id" | "source_file_path" | "policy_number"> | null;
@@ -57,6 +60,14 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  // Record who viewed/downloaded which document (for the activity feed).
+  await logActivity(
+    agent,
+    download ? "download_document" : "view_document",
+    `Policy #${p.policy_number || "—"}`,
+    workspace
+  );
 
   return NextResponse.json({ url: data.signedUrl });
 }

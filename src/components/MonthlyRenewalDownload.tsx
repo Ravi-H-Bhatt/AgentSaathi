@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { CalendarDays, Download, ChevronDown } from "lucide-react";
-import { downloadRenewalsByMonthPdf } from "@/lib/clientPdf";
+import { downloadRenewalsByMonthPdf, policyDueInMonth } from "@/lib/clientPdf";
 import type { ClientWithPolicies } from "@/lib/types";
 
 const MONTHS = [
@@ -25,13 +25,14 @@ export function MonthlyRenewalDownload({
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth());
 
-  // Count policies renewing per month for a helpful hint on each option.
+  // Count policies due per month (mode-aware for LIC: a monthly policy counts
+  // in every month, quarterly in 4 months, etc.).
   const counts = new Array(12).fill(0);
   for (const c of clients) {
     for (const p of c.policies) {
-      if (!p.renewal_date) continue;
-      const d = new Date(p.renewal_date);
-      if (!isNaN(d.getTime())) counts[d.getMonth()]++;
+      for (let m = 0; m < 12; m++) {
+        if (policyDueInMonth(p, m)) counts[m]++;
+      }
     }
   }
 

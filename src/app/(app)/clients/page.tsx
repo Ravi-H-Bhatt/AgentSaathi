@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentAgent } from "@/lib/auth";
 import { getAllClientsWithPolicies } from "@/lib/data";
-import { ownerIdFor, permissionsFor, isColleague } from "@/lib/team";
+import { ownerIdFor, permissionsFor } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { ClientsList } from "@/components/ClientsList";
 import { DownloadAllButton } from "@/components/DownloadAllButton";
 import { MonthlyRenewalDownload } from "@/components/MonthlyRenewalDownload";
@@ -11,7 +12,11 @@ import { DeleteAllClientsButton } from "@/components/DeleteAllClientsButton";
 export default async function ClientsPage() {
   const agent = (await getCurrentAgent())!;
   if (!permissionsFor(agent).clients) redirect("/dashboard");
-  const clientsWithPolicies = await getAllClientsWithPolicies(ownerIdFor(agent));
+  const workspace = await getWorkspace();
+  const clientsWithPolicies = await getAllClientsWithPolicies(
+    ownerIdFor(agent),
+    workspace
+  );
 
   const data = clientsWithPolicies.map((c) => {
     // Get most recent address from policies (first policy has most recent renewal_date due to ordering)
@@ -56,7 +61,7 @@ export default async function ClientsPage() {
             clients={clientsWithPolicies}
             agentName={agent.full_name || agent.email}
           />
-          {!isColleague(agent) && clientsWithPolicies.length > 0 && (
+          {permissionsFor(agent).delete && clientsWithPolicies.length > 0 && (
             <DeleteAllClientsButton />
           )}
           <Link

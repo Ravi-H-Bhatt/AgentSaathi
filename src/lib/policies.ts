@@ -2,6 +2,7 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeAge } from "@/lib/premium";
+import type { Workspace } from "@/lib/workspace";
 
 export interface SavePolicyInput {
   client_name: string;
@@ -54,7 +55,8 @@ function dateOrNull(v: unknown): string | null {
  */
 export async function savePolicyForOwner(
   ownerId: string,
-  body: SavePolicyInput
+  body: SavePolicyInput,
+  workspace: Workspace
 ): Promise<SavePolicyResult> {
   if (!body.client_name || !body.client_name.trim()) {
     throw new Error("Client name is required");
@@ -74,12 +76,13 @@ export async function savePolicyForOwner(
     // 2. DOB match if provided
     // 3. Email match if provided
     // 4. Phone match if provided (last resort)
-    let findClient = db
+    const findClient = db
       .from("clients")
       .select("id, full_name, date_of_birth, email, phone")
       .eq("agent_id", ownerId)
+      .eq("workspace", workspace)
       .ilike("full_name", body.client_name.trim());
-    
+
     const { data: candidates } = await findClient;
     if (candidates && candidates.length > 0) {
       // Try exact match first (name + DOB/email)
@@ -117,6 +120,7 @@ export async function savePolicyForOwner(
         phone: body.client_phone || null,
         date_of_birth: dob,
         age,
+        workspace,
       })
       .select("id")
       .single();
@@ -140,6 +144,7 @@ export async function savePolicyForOwner(
       .from("policies")
       .select("id, client_id")
       .eq("agent_id", ownerId)
+      .eq("workspace", workspace)
       .eq("policy_number", policyNumber)
       .limit(1)
       .maybeSingle();
@@ -158,6 +163,7 @@ export async function savePolicyForOwner(
     .from("policies")
     .select("id")
     .eq("agent_id", ownerId)
+    .eq("workspace", workspace)
     .eq("client_id", clientId);
 
   const dupFields = {
@@ -192,6 +198,7 @@ export async function savePolicyForOwner(
       start_date: startDate,
       renewal_date: renewalDate,
       source_file_path: body.source_file_path || null,
+      workspace,
     })
     .select("id")
     .single();

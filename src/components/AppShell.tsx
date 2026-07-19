@@ -20,11 +20,13 @@ import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
 import { TeamChat } from "@/components/TeamChat";
 import { ProfileEditor } from "@/components/ProfileEditor";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 import { ReportIssue } from "@/components/ReportIssue";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { ClockWidget } from "@/components/ClockWidget";
 import { MaintenanceWatcher } from "@/components/MaintenanceWatcher";
 import type { Permissions } from "@/lib/types";
+import type { Workspace } from "@/lib/workspace";
 
 export function AppShell({
   children,
@@ -35,6 +37,7 @@ export function AppShell({
   isColleague,
   permissions,
   openSince,
+  workspace,
   maintenanceActive = false,
   maintenanceMessage = null,
 }: {
@@ -46,6 +49,7 @@ export function AppShell({
   isColleague: boolean;
   permissions: Permissions;
   openSince: string | null;
+  workspace: Workspace;
   maintenanceActive?: boolean;
   maintenanceMessage?: string | null;
 }) {
@@ -181,6 +185,7 @@ export function AppShell({
             <p className="text-xs text-muted truncate">{agentEmail}</p>
           </div>
         </div>
+        <WorkspaceSwitcher current={workspace} />
         <ProfileEditor
           currentName={displayName}
           currentPhone={agentPhone ?? ""}

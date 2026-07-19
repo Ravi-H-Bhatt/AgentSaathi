@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor } from "@/lib/team";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getLicNextDueISO } from "@/lib/lic-renewal";
 
 /**
  * POST /api/policies/mark-renewed
@@ -25,10 +26,10 @@ export async function POST(req: NextRequest) {
     const db = createAdminClient();
     const ownerId = ownerIdFor(agent);
 
-    // First, verify the policy belongs to this owner (fetch raw_extract too).
+    // First, verify the policy belongs to this owner (fetch mode + raw_extract).
     const { data: policy, error: fetchError } = await db
       .from("policies")
-      .select("id, renewal_date, raw_extract")
+      .select("id, start_date, renewal_date, mode, raw_extract")
       .eq("id", policyId)
       .eq("agent_id", ownerId)
       .single();
@@ -37,26 +38,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Policy not found" }, { status: 404 });
     }
 
-    // Calculate next year's renewal date
-    let newRenewalDate: string;
-    if (policy.renewal_date) {
-      const currentRenewal = new Date(policy.renewal_date);
-      const nextRenewal = new Date(currentRenewal);
-      nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
-      newRenewalDate = nextRenewal.toISOString().split('T')[0];
-    } else {
-      // If no renewal date, set it to one year from now
-      const nextYear = new Date();
-      nextYear.setFullYear(nextYear.getFullYear() + 1);
-      newRenewalDate = nextYear.toISOString().split('T')[0];
-    }
-
-    // Store the "renewed" marker INSIDE the existing raw_extract jsonb column
-    // (no schema change needed). This makes the policy drop off the renewals
-    // list for this cycle. It naturally returns next year.
     const existingRaw =
       (policy.raw_extract as Record<string, unknown> | null) || {};
-    const newRaw = { ...existingRaw, renewed_at: new Date().toISOString() };
+    const isLic = existingRaw.source === "lic_premium_due";
+
+    let newRenewalDate: string;
+    let newRaw: Record<string, unknown>;
+
+    if (isLic) {
+      // LIC: schedule is derived from D.o.C + mode. "Collected" marks the
+      // CURRENT due installment as paid (paid_through) so the policy rolls to
+      // the next cycle — a monthly policy reappears next month, a quarterly one
+      // next quarter, etc. No long "renewed_at" hide.
+      const doc = policy.start_date || policy.renewal_date;
+      const prevPaid =
+        (existingRaw.paid_through as string | undefined) || null;
+      // The installment being collected now.
+      const collected = getLicNextDueISO(doc, policy.mode, new Date(), prevPaid);
+      // The following due after this collection.
+      const following =
+        getLicNextDueISO(doc, policy.mode, new Date(), collected) || collected;
+      newRenewalDate =
+        following || collected || new Date().toISOString().split("T")[0];
+      const { renewed_at: _drop, ...rest } = existingRaw;
+      newRaw = {
+        ...rest,
+        paid_through: collected,
+        fup: following
+          ? `${following.slice(5, 7)}/${following.slice(0, 4)}`
+          : (rest.fup as string | undefined) ?? null,
+      };
+    } else {
+      // Annual (Home) policies: roll to next year and hide for this cycle.
+      if (policy.renewal_date) {
+        const nextRenewal = new Date(policy.renewal_date);
+        nextRenewal.setFullYear(nextRenewal.getFullYear() + 1);
+        newRenewalDate = nextRenewal.toISOString().split("T")[0];
+      } else {
+        const nextYear = new Date();
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+        newRenewalDate = nextYear.toISOString().split("T")[0];
+      }
+      newRaw = { ...existingRaw, renewed_at: new Date().toISOString() };
+    }
 
     const { error: updateError } = await db
       .from("policies")

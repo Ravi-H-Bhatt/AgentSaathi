@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { Workspace } from "@/lib/workspace";
 import type {
   Client,
   Policy,
@@ -38,34 +39,43 @@ async function fetchAllRows<T>(
   return all;
 }
 
-/** All clients for an agent, alphabetized. */
-export async function getClients(agentId: string): Promise<Client[]> {
+/** All clients for an agent in a workspace, alphabetized. */
+export async function getClients(
+  agentId: string,
+  workspace: Workspace
+): Promise<Client[]> {
   return fetchAllRows<Client>((db, from, to) =>
     db
       .from("clients")
       .select("*")
       .eq("agent_id", agentId)
+      .eq("workspace", workspace)
       .order("full_name", { ascending: true })
       .range(from, to)
   );
 }
 
-/** All policies for an agent. */
-export async function getPolicies(agentId: string): Promise<Policy[]> {
+/** All policies for an agent in a workspace. */
+export async function getPolicies(
+  agentId: string,
+  workspace: Workspace
+): Promise<Policy[]> {
   return fetchAllRows<Policy>((db, from, to) =>
     db
       .from("policies")
       .select("*")
       .eq("agent_id", agentId)
+      .eq("workspace", workspace)
       .order("renewal_date", { ascending: true })
       .range(from, to)
   );
 }
 
-/** A single client with all their policies (ownership enforced). */
+/** A single client with all their policies (ownership + workspace enforced). */
 export async function getClientWithPolicies(
   agentId: string,
-  clientId: string
+  clientId: string,
+  workspace: Workspace
 ): Promise<ClientWithPolicies | null> {
   const db = createAdminClient();
   const { data: client } = await db
@@ -73,6 +83,7 @@ export async function getClientWithPolicies(
     .select("*")
     .eq("id", clientId)
     .eq("agent_id", agentId)
+    .eq("workspace", workspace)
     .maybeSingle();
   if (!client) return null;
 
@@ -81,19 +92,21 @@ export async function getClientWithPolicies(
     .select("*")
     .eq("client_id", clientId)
     .eq("agent_id", agentId)
+    .eq("workspace", workspace)
     .order("renewal_date", { ascending: true });
 
   return { ...(client as Client), policies: (policies as Policy[]) || [] };
 }
 
-/** Every client of an agent, each with all their policies (alphabetized). */
+/** Every client of an agent in a workspace, each with all their policies. */
 export async function getAllClientsWithPolicies(
-  agentId: string
+  agentId: string,
+  workspace: Workspace
 ): Promise<ClientWithPolicies[]> {
   // Fetch ALL clients and ALL policies (paginated past the 1,000-row cap).
   const [clients, policies] = await Promise.all([
-    getClients(agentId),
-    getPolicies(agentId),
+    getClients(agentId, workspace),
+    getPolicies(agentId, workspace),
   ]);
 
   const byClient = new Map<string, Policy[]>();

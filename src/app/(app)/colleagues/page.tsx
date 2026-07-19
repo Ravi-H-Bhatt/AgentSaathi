@@ -57,6 +57,7 @@ export default async function ColleaguesPage() {
         agentId: a.agent_id,
         action: a.action,
         detail: a.detail,
+        workspace: a.workspace,
         createdAt: a.created_at,
       }))}
     />

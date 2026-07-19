@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentAgent } from "@/lib/auth";
 import { getClients, getPolicies } from "@/lib/data";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 import { answerGrounded } from "@/lib/groq";
 import { webSearchConfigured } from "@/lib/websearch";
 import type { Client, Policy } from "@/lib/types";
@@ -131,11 +132,12 @@ export async function POST(request: NextRequest) {
   // Ensure session is valid (RLS would also enforce ownership).
   await createClient();
   const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
 
   // Paginated fetch so ALL clients/policies are searchable (not just first 1000).
   const [clients, policies] = await Promise.all([
-    getClients(ownerId),
-    getPolicies(ownerId),
+    getClients(ownerId, workspace),
+    getPolicies(ownerId, workspace),
   ]);
 
   const context = buildContext(clients, policies, question);

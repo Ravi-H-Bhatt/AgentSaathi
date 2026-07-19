@@ -20,6 +20,10 @@ export interface RenewalItem {
   premium: number | null;
   renewalDate: string | null;
   mode: string | null;
+  /** LIC only: precomputed next-due date (ISO) that already accounts for mode. */
+  nextDueDate?: string | null;
+  /** LIC only: precomputed whole days until the next due date. */
+  daysLeft?: number | null;
 }
 
 /**
@@ -44,9 +48,9 @@ function buildWhatsAppLink(item: RenewalItem, agentName?: string): string | null
   if (!mobile) return null;
   const digits = "91" + mobile; // India country code
 
-  const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
-  const date = adjustedDate
-    ? shortDate(adjustedDate)
+  const nextDue = item.nextDueDate ?? getAdjustedRenewalDate(item.renewalDate);
+  const date = nextDue
+    ? shortDate(nextDue)
     : item.renewalDate
     ? shortDate(item.renewalDate)
     : "soon";
@@ -74,8 +78,8 @@ function buildWhatsAppLink(item: RenewalItem, agentName?: string): string | null
 }
 
 function buildEmailDraft(item: RenewalItem, agentName?: string): { subject: string; body: string } {
-  const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
-  const date = adjustedDate ? shortDate(adjustedDate) : (item.renewalDate ? shortDate(item.renewalDate) : "soon");
+  const nextDue = item.nextDueDate ?? getAdjustedRenewalDate(item.renewalDate);
+  const date = nextDue ? shortDate(nextDue) : (item.renewalDate ? shortDate(item.renewalDate) : "soon");
   const subject = `Renewal Reminder: ${item.policyType || "Policy"} due ${date}`;
   const body = `Dear ${item.clientName},
 
@@ -188,8 +192,8 @@ export function RenewalsList({
       <ul className="divide-y divide-border">
         <AnimatePresence initial={false}>
         {visibleRenewals.map((item) => {
-          const dleft = daysUntil(item.renewalDate);
-          const adjustedDate = getAdjustedRenewalDate(item.renewalDate);
+          const dleft = item.daysLeft ?? daysUntil(item.renewalDate);
+          const adjustedDate = item.nextDueDate ?? getAdjustedRenewalDate(item.renewalDate);
           const isConfirming = confirmRenewId === item.id;
           const isProcessing = renewingId === item.id;
           const waLink = buildWhatsAppLink(item, agentName);

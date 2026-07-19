@@ -6,6 +6,8 @@ export interface Permissions {
   clients: boolean;
   upload: boolean;
   email: boolean;
+  /** Allow deleting clients and individual policies. Off by default. */
+  delete: boolean;
 }
 
 export const DEFAULT_PERMISSIONS: Permissions = {
@@ -13,6 +15,8 @@ export const DEFAULT_PERMISSIONS: Permissions = {
   clients: true,
   upload: true,
   email: true,
+  // Deleting is destructive, so colleagues start WITHOUT it unless granted.
+  delete: false,
 };
 
 export interface Agent {
@@ -55,6 +59,8 @@ export interface ActivityLog {
   owner_id: string;
   action: string;
   detail: string | null;
+  /** Which dashboard the action happened in ("home" | "lic"). */
+  workspace: string;
   created_at: string;
 }
 
@@ -67,6 +73,8 @@ export interface Client {
   date_of_birth: string | null;
   age: number | null;
   notes: string | null;
+  /** Data partition this client belongs to ("home" | "lic"). */
+  workspace: string;
   created_at: string;
 }
 
@@ -89,6 +97,8 @@ export interface Policy {
   status: string;
   source_file_path: string | null;
   raw_extract: Record<string, unknown> | null;
+  /** Data partition this policy belongs to ("home" | "lic"). */
+  workspace: string;
   created_at: string;
 }
 

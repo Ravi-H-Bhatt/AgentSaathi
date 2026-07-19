@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
+import { getWorkspace } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -26,6 +27,7 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const db = createAdminClient();
+  const workspace = await getWorkspace();
 
   // MANDATORY fields validation
   const { client_name, policy_number, company, product_name, start_date, renewal_date } = body;
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
       .from("clients")
       .select("id")
       .eq("agent_id", agent.id)
+      .eq("workspace", workspace)
       .ilike("full_name", `%${client_name}%`)
       .limit(1);
 
@@ -83,6 +86,7 @@ export async function POST(request: NextRequest) {
           email: body.client_email || null,
           date_of_birth: body.date_of_birth || null,
           age: body.age || null,
+          workspace,
         })
         .select("id")
         .single();
@@ -99,6 +103,7 @@ export async function POST(request: NextRequest) {
       .insert({
         agent_id: agent.id,
         client_id: clientId,
+        workspace,
         company: company,
         policy_type: body.policy_type || null,
         product_name: product_name,
@@ -122,7 +127,7 @@ export async function POST(request: NextRequest) {
     if (policyError) throw policyError;
     if (!policy) throw new Error("Failed to create policy");
 
-    await logActivity(agent, "create_policy_manual", `${policy_number} for ${client_name}`);
+    await logActivity(agent, "create_policy_manual", `${policy_number} for ${client_name}`, workspace);
 
     return NextResponse.json({
       success: true,
