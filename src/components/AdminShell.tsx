@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Users, BarChart3, LogOut, Flag, Activity } from "lucide-react";
 import { Logo } from "@/components/Logo";
+import { NotificationToggle } from "@/components/NotificationToggle";
 
 const nav = [
   { href: "/admin", label: "Agents", icon: Users },
@@ -67,6 +68,18 @@ export function AdminShell({
             );
           })}
         </nav>
+
+        {/* Admins enable push here so they receive alerts when an agent or
+            colleague submits a new issue report. */}
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-2 flex-wrap">
+          <span className="text-sm text-muted">
+            Turn on push to get alerted when someone reports an issue.
+          </span>
+          <div className="w-56 max-w-full">
+            <NotificationToggle />
+          </div>
+        </div>
+
         {children}
       </div>
     </div>
