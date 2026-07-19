@@ -13,12 +13,16 @@ function isLicPolicy(p: Policy): boolean {
 
 /**
  * Does a policy have a premium due in a given calendar month (0-11)?
- *  - LIC: derived from D.o.C month + mode (Monthly → every month, Quarterly →
- *    every 3rd month from D.o.C, Half-Yearly → every 6th, Yearly → D.o.C month).
+ *  - LIC: mode-aware, anchored on the D.o.C month:
+ *      Monthly     → due EVERY month,
+ *      Quarterly   → the D.o.C month and every 3rd month after it (4 months/yr),
+ *      Half-Yearly → the D.o.C month and 6 months later (2 months/yr),
+ *      Yearly      → only the D.o.C month.
  *  - Others: the stored renewal month (annual).
  */
 export function policyDueInMonth(p: Policy, month: number): boolean {
-  if (isLicPolicy(p) && p.start_date) {
+  if (isLicPolicy(p)) {
+    if (!p.start_date) return false;
     const d = new Date(p.start_date);
     if (isNaN(d.getTime())) return false;
     const step = licModeMonths(p.mode) ?? 12;

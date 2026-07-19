@@ -23,8 +23,8 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="h-16 border-b border-border bg-card sticky top-0 z-30">
-        <div className="h-full px-4 lg:px-8 flex items-center justify-between max-w-6xl mx-auto w-full">
+      <header className="min-h-16 pt-[env(safe-area-inset-top)] border-b border-border bg-card sticky top-0 z-30">
+        <div className="min-h-16 px-4 lg:px-8 flex items-center justify-between max-w-6xl mx-auto w-full">
           <div className="flex items-center gap-8">
             <Logo />
             <span className="text-xs font-semibold uppercase tracking-wide bg-foreground text-background px-2 py-1 rounded-full">

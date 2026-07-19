@@ -118,7 +118,7 @@ export function AppShell({
 
   const SidebarContent = (
     <div className="flex flex-col h-full">
-      <div className="h-16 flex items-center px-5 border-b border-border">
+      <div className="min-h-16 pt-[env(safe-area-inset-top)] flex items-center px-5 border-b border-border">
         <Logo />
       </div>
       <nav className="flex-1 p-3 space-y-1">
@@ -243,7 +243,7 @@ export function AppShell({
 
       {/* Main */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
-        <header className="h-16 border-b border-border bg-background/80 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 lg:px-8">
+        <header className="min-h-16 pt-[env(safe-area-inset-top)] border-b border-border bg-background/80 backdrop-blur sticky top-0 z-30 flex items-center justify-between px-4 lg:px-8">
           <button
             onClick={() => setMobileOpen(true)}
             className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-black/[.04]"
