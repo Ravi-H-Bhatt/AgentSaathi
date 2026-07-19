@@ -91,6 +91,7 @@ const ACTION_LABEL: Record<string, string> = {
   create_policy_manual: "Added a policy manually",
   send_email: "Sent a reminder",
   team_chat: "Sent a team message",
+  direct_message: "Sent a direct message",
   delete_policy: "Deleted a policy",
   delete_client: "Deleted a client",
   delete_all_clients: "Deleted all clients",

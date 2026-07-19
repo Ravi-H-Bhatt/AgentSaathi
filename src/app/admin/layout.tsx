@@ -15,7 +15,7 @@ export default async function AdminLayout({
   if (agent.role !== "admin") redirect("/dashboard");
 
   return (
-    <AdminShell agentEmail={agent.email}>
+    <AdminShell agentEmail={agent.email} agentId={agent.id}>
       {children}
     </AdminShell>
   );

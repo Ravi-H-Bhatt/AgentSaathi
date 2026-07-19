@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Send, MessageSquare } from "lucide-react";
+import { Send, MessageSquare, ChevronLeft, Loader2 } from "lucide-react";
 import type { ChatMessage } from "@/app/api/chat/route";
+import type { ChatContact } from "@/app/api/chat/contacts/route";
 
 export function TeamChat({ currentUserId }: { currentUserId: string }) {
+  const [contacts, setContacts] = useState<ChatContact[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(true);
+  const [active, setActive] = useState<ChatContact | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -12,12 +16,32 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastSeenRef = useRef<string | null>(null);
 
+  // Load the list of people I can message.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/chat/contacts");
+        const data = await res.json();
+        if (!cancelled) setContacts(data.contacts || []);
+      } catch {
+        /* ignore */
+      } finally {
+        if (!cancelled) setLoadingContacts(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
+    if (!active) return;
     try {
-      const url =
-        lastSeenRef.current
-          ? `/api/chat?since=${encodeURIComponent(lastSeenRef.current)}`
-          : "/api/chat";
+      const base = `/api/chat?with=${encodeURIComponent(active.id)}`;
+      const url = lastSeenRef.current
+        ? `${base}&since=${encodeURIComponent(lastSeenRef.current)}`
+        : base;
       const res = await fetch(url);
       const data = await res.json();
       const incoming: ChatMessage[] = data.messages || [];
@@ -28,24 +52,31 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
           return [...prev, ...incoming.filter((m) => !existing.has(m.id))];
         });
       }
-    } catch { /* ignore */ }
-  }, []);
+    } catch {
+      /* ignore */
+    }
+  }, [active]);
 
-  // Initial load + polling every 5s
+  // Load + poll the active thread every 5s.
   useEffect(() => {
+    if (!active) return;
+    setMessages([]);
+    lastSeenRef.current = null;
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [active, load]);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
   async function send() {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sending || !active) return;
     setInput("");
     setSending(true);
     setError(null);
@@ -53,7 +84,7 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, recipientId: active.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
@@ -89,15 +120,73 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
     });
   }
 
+  // ---- Contacts list view ----
+  if (!active) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 overflow-y-auto px-2 py-2 min-h-0">
+          {loadingContacts ? (
+            <div className="flex items-center justify-center h-full text-muted">
+              <Loader2 size={20} className="animate-spin" />
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center text-muted py-12">
+              <MessageSquare size={32} className="mb-3 opacity-30" />
+              <p className="text-sm">No one to message yet.</p>
+            </div>
+          ) : (
+            <ul className="space-y-1">
+              {contacts.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => setActive(c)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-black/[.04] transition text-left"
+                  >
+                    <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-semibold shrink-0">
+                      {initials(c.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{c.name}</p>
+                      <p className="text-xs text-muted capitalize">{c.role}</p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Direct message thread view ----
   return (
     <div className="flex flex-col h-full">
+      {/* Thread header with back to contacts */}
+      <div className="flex items-center gap-2 px-2 py-2 border-b border-border">
+        <button
+          onClick={() => setActive(null)}
+          className="p-1.5 rounded-lg hover:bg-black/[.04]"
+          aria-label="Back to contacts"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <div className="h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center text-xs font-semibold">
+          {initials(active.name)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-medium truncate">{active.name}</p>
+          <p className="text-xs text-muted capitalize">{active.role}</p>
+        </div>
+      </div>
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 min-h-0">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted py-12">
             <MessageSquare size={32} className="mb-3 opacity-30" />
             <p className="text-sm">No messages yet.</p>
-            <p className="text-xs mt-1">Start the conversation with your team.</p>
+            <p className="text-xs mt-1">Say hello to {active.name}.</p>
           </div>
         )}
         {messages.map((m) => {
@@ -110,9 +199,6 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
                 </div>
               )}
               <div className={`max-w-[78%] ${mine ? "items-end" : "items-start"} flex flex-col gap-0.5`}>
-                {!mine && (
-                  <span className="text-xs text-muted px-1">{m.sender_name || "Unknown"}</span>
-                )}
                 <div
                   className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words ${
                     mine
@@ -143,9 +229,9 @@ export function TeamChat({ currentUserId }: { currentUserId: string }) {
               }
             }}
             rows={1}
-            placeholder="Message your team…"
+            placeholder={`Message ${active.name}…`}
             className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 max-h-28"
-            style={{ minHeight: '40px' }}
+            style={{ minHeight: "40px" }}
           />
           <button
             onClick={send}
