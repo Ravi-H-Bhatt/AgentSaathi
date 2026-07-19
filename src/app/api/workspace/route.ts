@@ -1,36 +1,57 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cookies } from "next/headers";
 import { getCurrentAgent } from "@/lib/auth";
-import { WORKSPACE_COOKIE, isWorkspace } from "@/lib/workspace";
+import { WORKSPACE_COOKIE, isWorkspace, type Workspace } from "@/lib/workspace";
 
 export const runtime = "nodejs";
 
+const COOKIE_OPTS = {
+  path: "/",
+  httpOnly: true,
+  sameSite: "lax" as const,
+  maxAge: 60 * 60 * 24 * 365, // remember for a year
+};
+
 /**
- * Switch the active workspace (home | lic). Sets a cookie that every server
- * query reads. The client navigates + refreshes afterwards, so the switch is
- * effectively instant with no data bleed between the two dashboards.
- * POST /api/workspace  { workspace: "home" | "lic" }
+ * Switch the active workspace via a FULL navigation (most reliable on mobile /
+ * installed PWA — no client-router or service-worker cache in the way):
+ *
+ *   GET /api/workspace?to=lic&next=/dashboard
+ *
+ * Sets the cookie on the redirect response and 302s to the destination, which
+ * is then server-rendered fresh with the new workspace. Defaults to "home".
  */
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const agent = await getCurrentAgent();
+  if (!agent || agent.status !== "approved") {
+    return NextResponse.redirect(new URL("/login", url));
+  }
+
+  const to = url.searchParams.get("to");
+  const ws: Workspace = isWorkspace(to) ? to : "home";
+
+  // Only allow internal, same-origin destinations.
+  const nextParam = url.searchParams.get("next") || "/dashboard";
+  const dest = nextParam.startsWith("/") ? nextParam : "/dashboard";
+
+  const res = NextResponse.redirect(new URL(dest, url));
+  res.cookies.set(WORKSPACE_COOKIE, ws, COOKIE_OPTS);
+  return res;
+}
+
+/** Programmatic switch (kept for completeness). Body: { workspace }. */
 export async function POST(request: NextRequest) {
   const agent = await getCurrentAgent();
   if (!agent || agent.status !== "approved") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   const { workspace } = (await request.json().catch(() => ({}))) as {
     workspace?: unknown;
   };
   if (!isWorkspace(workspace)) {
     return NextResponse.json({ error: "Invalid workspace" }, { status: 400 });
   }
-
-  const store = await cookies();
-  store.set(WORKSPACE_COOKIE, workspace, {
-    path: "/",
-    httpOnly: true,
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365, // remember the choice for a year
-  });
-
-  return NextResponse.json({ ok: true, workspace });
+  const res = NextResponse.json({ ok: true, workspace });
+  res.cookies.set(WORKSPACE_COOKIE, workspace, COOKIE_OPTS);
+  return res;
 }
