@@ -60,6 +60,15 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     matchedPolicyNumber?: string | null;
   } | null>(null);
 
+  // Single "Policy Schedule" upload result (match/attach or new save) — shown
+  // WITHOUT the bulk review table.
+  const [scheduleResult, setScheduleResult] = useState<{
+    matched: boolean;
+    attached: number;
+    created: number;
+    clientName: string | null;
+  } | null>(null);
+
   // Bundle upload state
   const [bundleResults, setBundleResults] = useState<{
     total: number;
@@ -92,6 +101,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     setFilePath(null);
     setForm(null);
     setRows([]);
+    setScheduleResult(null);
 
     const fd = new FormData();
     fd.append("file", file);
@@ -109,6 +119,39 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Extraction failed");
       setFilePath(data.filePath);
+
+      // Single New India "Policy Schedule": no review table. Match by current/
+      // previous policy number and attach this PDF to the matched policy, or
+      // save it as a new policy if nothing matches.
+      if (data.mode === "schedule" && Array.isArray(data.rows)) {
+        setStep("saving");
+        try {
+          const res = await fetch("/api/policies/bulk", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              rows: data.rows,
+              source_file_path: data.filePath,
+            }),
+          });
+          const saveData = await res.json();
+          if (!res.ok) throw new Error(saveData.error || "Save failed");
+          setScheduleResult({
+            matched: !!saveData.matched,
+            attached: saveData.attached ?? 0,
+            created: saveData.created ?? 0,
+            clientName:
+              saveData.matchedClientName ??
+              (data.rows[0]?.client_name || null),
+          });
+          setStep("done");
+          setTimeout(() => router.refresh(), 100);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Save failed");
+          setStep("idle");
+        }
+        return;
+      }
 
       if (data.mode === "bulk" && Array.isArray(data.rows)) {
         setRows(data.rows);
@@ -259,7 +302,32 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
       <div className="space-y-5">
         <div className="rounded-2xl border border-border bg-card p-10 text-center">
           <CheckCircle2 className="mx-auto text-green-600" size={40} />
-          {bulkResult ? (
+          {scheduleResult ? (
+            scheduleResult.matched ? (
+              <>
+                <p className="mt-3 text-lg font-semibold">✅ Match found</p>
+                <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+                  {scheduleResult.clientName
+                    ? `Matched an existing policy for "${scheduleResult.clientName}".`
+                    : "Matched an existing policy by current/previous policy number."}
+                  {scheduleResult.attached > 0
+                    ? " This PDF is now attached — open the client and tap “View” on the policy card to see the full document."
+                    : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="mt-3 font-medium">Policy saved</p>
+                <p className="text-sm text-muted mt-1 max-w-md mx-auto">
+                  {scheduleResult.clientName
+                    ? `Saved for "${scheduleResult.clientName}".`
+                    : "Saved."}{" "}
+                  No existing match was found, so it was added as a new policy
+                  with this document attached.
+                </p>
+              </>
+            )
+          ) : bulkResult ? (
             <>
               {bulkResult.matched && (
                 <div className="mt-4 mx-auto max-w-md rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
@@ -337,6 +405,7 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
               setRows([]);
               setRegisterType(null);
               setBulkResult(null);
+              setScheduleResult(null);
               setError(null);
               setInfo(null);
               setFileName("");

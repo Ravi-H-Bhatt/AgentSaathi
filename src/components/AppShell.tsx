@@ -25,6 +25,7 @@ import { ReportIssue } from "@/components/ReportIssue";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { ClockWidget } from "@/components/ClockWidget";
 import { MaintenanceWatcher } from "@/components/MaintenanceWatcher";
+import { AccessWatcher } from "@/components/AccessWatcher";
 import type { Permissions } from "@/lib/types";
 import type { Workspace } from "@/lib/workspace";
 
@@ -211,6 +212,10 @@ export function AppShell({
         initialActive={maintenanceActive}
         initialMessage={maintenanceMessage}
       />
+
+      {/* Live access check — shows a blocking "access revoked" screen the moment
+          an admin revokes this agent (or their parent agent). */}
+      <AccessWatcher />
 
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-64 shrink-0 border-r border-border bg-card flex-col fixed inset-y-0">

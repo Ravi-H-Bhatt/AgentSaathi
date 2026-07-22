@@ -138,6 +138,21 @@ export async function POST(request: NextRequest) {
   // Use auto-detection to parse any supported register type
   const { rows, type, confidence } = await parseRegisterAuto(text, bytes);
   if (rows.length > 0 && confidence >= 0.5) {
+    // New India single "Policy Schedule" — one policy carrying current +
+    // previous policy numbers. Handle it as its own mode so the UI skips the
+    // bulk table and just matches/attaches (or saves) directly.
+    if (type === 'newindia-schedule') {
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: false,
+        mode: "schedule",
+        rows,
+        registerType: type,
+        confidence: 1.0,
+      });
+    }
+
     // For New India registers, use fast coordinate-based extraction
     if (type === 'newindia') {
       console.log('[extract] Using fast coordinate extraction for New India');

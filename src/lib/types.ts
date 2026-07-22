@@ -70,6 +70,9 @@ export interface Client {
   full_name: string;
   email: string | null;
   phone: string | null;
+  /** True when the phone was typed in by the agent (editable); false when it
+   *  was extracted from an uploaded policy (fixed). */
+  phone_manual?: boolean;
   date_of_birth: string | null;
   age: number | null;
   notes: string | null;

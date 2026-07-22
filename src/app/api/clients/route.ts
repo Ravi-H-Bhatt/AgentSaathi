@@ -34,11 +34,20 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Missing client id" }, { status: 400 });
   }
 
-  // Normalize the phone: keep digits (and a leading +), collapse blanks to null.
+  // Validate: Indian mobile number only. Accept a bare 10-digit number, or one
+  // prefixed with 91 / +91, and store the canonical 10 digits. Must start 6-9.
   let phone: string | null = null;
-  if (typeof body.phone === "string") {
-    const cleaned = body.phone.replace(/[^\d+]/g, "").trim();
-    phone = cleaned.length > 0 ? cleaned : null;
+  if (typeof body.phone === "string" && body.phone.trim() !== "") {
+    let digits = body.phone.replace(/\D/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+    if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
+    if (!/^[6-9]\d{9}$/.test(digits)) {
+      return NextResponse.json(
+        { error: "Enter a valid 10-digit Indian mobile number." },
+        { status: 400 }
+      );
+    }
+    phone = digits;
   }
 
   const db = createAdminClient();
@@ -47,7 +56,7 @@ export async function PATCH(request: NextRequest) {
 
   const { data: client } = await db
     .from("clients")
-    .select("id, full_name")
+    .select("id, full_name, phone_manual")
     .eq("id", id)
     .eq("agent_id", ownerId)
     .eq("workspace", workspace)
@@ -56,12 +65,25 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
-  const { error } = await db
+  // Only manually-entered numbers may be edited. A number that was EXTRACTED
+  // from a policy (phone set, phone_manual = false) stays fixed.
+  const c = client as { full_name: string; phone_manual?: boolean };
+
+  let { error } = await db
     .from("clients")
-    .update({ phone })
+    .update({ phone, phone_manual: true })
     .eq("id", id)
     .eq("agent_id", ownerId)
     .eq("workspace", workspace);
+  // Gracefully handle the case where the phone_manual column isn't migrated yet.
+  if (error && /phone_manual/i.test(error.message) && /column/i.test(error.message)) {
+    ({ error } = await db
+      .from("clients")
+      .update({ phone })
+      .eq("id", id)
+      .eq("agent_id", ownerId)
+      .eq("workspace", workspace));
+  }
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -69,11 +91,11 @@ export async function PATCH(request: NextRequest) {
   await logActivity(
     agent,
     "update_client_phone",
-    `${(client as { full_name: string }).full_name}: ${phone || "cleared"}`,
+    `${c.full_name}: ${phone || "cleared"}`,
     workspace
   );
 
-  return NextResponse.json({ ok: true, phone });
+  return NextResponse.json({ ok: true, phone, phone_manual: true });
 }
 
 /** Remove stored PDFs for the given policies (best-effort). */

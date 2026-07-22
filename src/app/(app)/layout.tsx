@@ -19,6 +19,17 @@ export default async function AppLayout({
   if (agent.role === "admin") redirect("/admin");
   if (agent.status !== "approved") redirect("/pending");
 
+  // A colleague also loses access when their parent agent is revoked.
+  if (agent.parent_agent_id) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const { data: parent } = await createAdminClient()
+      .from("agents")
+      .select("status")
+      .eq("id", agent.parent_agent_id)
+      .maybeSingle();
+    if (!parent || parent.status !== "approved") redirect("/pending");
+  }
+
   // Global "work in progress" mode — the overlay is rendered LIVE inside
   // AppShell by <MaintenanceWatcher/> (polls every 2s), so it appears and
   // disappears for all agents without any manual refresh. We pass the initial

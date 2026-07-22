@@ -2,12 +2,24 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check } from "lucide-react";
+import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check, Pencil, MessageCircle } from "lucide-react";
 import { money, shortDate, companyLabel } from "@/lib/format";
 import { getLicNextDueISO } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
 import { downloadClientPdf } from "@/lib/clientPdf";
+
+/**
+ * Canonical 10-digit Indian mobile from any stored/typed value, or null if it
+ * isn't a valid Indian mobile (e.g. a masked "XXXXXX3163" extracted number).
+ */
+function indianMobile(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  let d = String(raw).replace(/\D/g, "");
+  if (d.length === 12 && d.startsWith("91")) d = d.slice(2);
+  if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
+  return /^[6-9]\d{9}$/.test(d) ? d : null;
+}
 
 /** Format an ISO date (yyyy-mm-dd) as d/m/yyyy (e.g. "9/10/2025"). */
 function dmy(iso: string | null | undefined): string {
@@ -126,16 +138,31 @@ export function ClientDetail({
     null
   );
 
-  // Inline mobile-number entry for clients that have no phone on file.
+  // Inline mobile-number entry/editing.
+  //  - No phone on file      → can ADD a number.
+  //  - Manually-added number → can EDIT it.
+  //  - Extracted number      → stays FIXED (no edit).
   const [phone, setPhone] = useState<string | null>(client.phone);
+  const [phoneManual, setPhoneManual] = useState<boolean>(!!client.phone_manual);
   const [phoneInput, setPhoneInput] = useState("");
   const [editingPhone, setEditingPhone] = useState(false);
   const [savingPhone, setSavingPhone] = useState(false);
 
+  const mobile = indianMobile(phone);
+
+  function startEditPhone() {
+    setPhoneInput(indianMobile(phone) ?? "");
+    setEditingPhone(true);
+  }
+
   async function savePhone() {
-    const value = phoneInput.replace(/[^\d+]/g, "").trim();
-    if (value.length < 7) {
-      setNotice({ type: "err", msg: "Enter a valid mobile number." });
+    let digits = phoneInput.replace(/\D/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) digits = digits.slice(2);
+    if (!/^[6-9]\d{9}$/.test(digits)) {
+      setNotice({
+        type: "err",
+        msg: "Enter a valid 10-digit Indian mobile number.",
+      });
       return;
     }
     setSavingPhone(true);
@@ -144,11 +171,12 @@ export function ClientDetail({
       const res = await fetch("/api/clients", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: client.id, phone: value }),
+        body: JSON.stringify({ id: client.id, phone: digits }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save number");
-      setPhone(data.phone ?? value);
+      setPhone(data.phone ?? digits);
+      setPhoneManual(true);
       setEditingPhone(false);
       setPhoneInput("");
       setNotice({ type: "ok", msg: "Mobile number saved." });
@@ -278,31 +306,27 @@ export function ClientDetail({
               </h1>
               {/* Phone gets its own line directly below the name. */}
               <div className="mt-1.5 text-sm text-muted">
-                {phone ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Phone size={14} className="shrink-0" />
-                    <a href={`tel:${phone}`} className="hover:text-foreground transition">
-                      {phone}
-                    </a>
-                  </span>
-                ) : editingPhone ? (
+                {editingPhone ? (
                   <div className="flex items-center gap-2 flex-wrap">
                     <input
                       type="tel"
-                      inputMode="tel"
+                      inputMode="numeric"
                       autoFocus
+                      maxLength={10}
                       value={phoneInput}
-                      onChange={(e) => setPhoneInput(e.target.value)}
+                      onChange={(e) =>
+                        setPhoneInput(e.target.value.replace(/\D/g, "").slice(0, 10))
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") savePhone();
                         if (e.key === "Escape") setEditingPhone(false);
                       }}
-                      placeholder="Enter mobile number"
-                      className="rounded-full border border-border bg-background px-3.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 w-44"
+                      placeholder="10-digit mobile number"
+                      className="rounded-full border border-border bg-background px-3.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 w-48"
                     />
                     <button
                       onClick={savePhone}
-                      disabled={savingPhone}
+                      disabled={savingPhone || phoneInput.length !== 10}
                       className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-foreground text-background hover:opacity-90 transition disabled:opacity-50"
                     >
                       {savingPhone ? (
@@ -322,9 +346,47 @@ export function ClientDetail({
                       Cancel
                     </button>
                   </div>
+                ) : phone ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Phone size={14} className="shrink-0" />
+                      {mobile ? (
+                        <a
+                          href={`tel:+91${mobile}`}
+                          className="hover:text-foreground transition"
+                        >
+                          +91 {mobile}
+                        </a>
+                      ) : (
+                        <span>{phone}</span>
+                      )}
+                    </span>
+                    {mobile && (
+                      <a
+                        href={`https://wa.me/91${mobile}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-200 text-green-700 hover:bg-green-50 transition"
+                      >
+                        <MessageCircle size={14} /> WhatsApp
+                      </a>
+                    )}
+                    {/* Only manually-entered numbers are editable; extracted stay fixed. */}
+                    {phoneManual && (
+                      <button
+                        onClick={startEditPhone}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition"
+                      >
+                        <Pencil size={13} /> Edit
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button
-                    onClick={() => setEditingPhone(true)}
+                    onClick={() => {
+                      setPhoneInput("");
+                      setEditingPhone(true);
+                    }}
                     className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-dashed border-border text-muted hover:text-foreground hover:border-foreground/40 transition"
                   >
                     <Phone size={14} /> Add mobile number

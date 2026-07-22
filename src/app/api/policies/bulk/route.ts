@@ -190,16 +190,16 @@ export async function POST(request: NextRequest) {
   //         imported. Re-uploading still won't double, because any row whose
   //         composite key already exists in the DB is skipped. ----
   const toImport = valid.filter((r) => {
-    // A renewal/schedule row (has a previous policy number) whose current policy
-    // number is already stored → skip, so re-uploading the same policy schedule
-    // never doubles it (its name may differ from the mapped client's name).
-    if (
-      r.previous_policy_number &&
-      r.policy_number &&
-      clientIdByPolicyNumber.has(String(r.policy_number).trim())
-    ) {
-      console.log('[bulk] Skipping renewal with existing current policy:', r.policy_number);
-      return false;
+    // A schedule/renewal row (carries a previous policy number) whose CURRENT
+    // OR PREVIOUS policy number already exists → DO NOT create a new detail.
+    // We attach the uploaded PDF to that matched existing policy instead (below).
+    if (r.previous_policy_number) {
+      const cur = r.policy_number?.toString().trim();
+      const prev = r.previous_policy_number.toString().trim();
+      if ((cur && policyByNumber.has(cur)) || (prev && policyByNumber.has(prev))) {
+        console.log('[bulk] Schedule matched existing policy — attaching, not creating:', cur || prev);
+        return false;
+      }
     }
     const key = rowKey(
       r.client_name!,
@@ -243,18 +243,19 @@ export async function POST(request: NextRequest) {
     const prev = r.previous_policy_number?.toString().trim() || "";
     const curMatch = cur ? policyByNumber.get(cur) : undefined;
     const prevMatch = prev ? policyByNumber.get(prev) : undefined;
-    if (curMatch || prevMatch) {
+    const target = curMatch || prevMatch;
+    if (target) {
       matched = true;
-      const who = (curMatch || prevMatch)!;
-      matchedClientName = clientNameById.get(who.client_id) || matchedClientName;
+      matchedClientName = clientNameById.get(target.client_id) || matchedClientName;
       matchedPolicyNumber = matchedPolicyNumber || cur || prev || null;
     }
-    // Backfill the document onto the already-stored current policy.
-    if (body.source_file_path && curMatch) {
+    // Attach the uploaded PDF to the matched existing policy (current match wins,
+    // else the previous/renewed one) so its "View" opens this full document.
+    if (body.source_file_path && target) {
       const { error: attachErr } = await db
         .from("policies")
         .update({ source_file_path: body.source_file_path })
-        .eq("id", curMatch.id)
+        .eq("id", target.id)
         .eq("agent_id", ownerId)
         .eq("workspace", workspace);
       if (!attachErr) attached++;
