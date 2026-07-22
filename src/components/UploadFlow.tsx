@@ -54,6 +54,10 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
     skippedNoName: number;
     skippedConflict: number;
     clientsCreated: number;
+    matched?: boolean;
+    attached?: number;
+    matchedClientName?: string | null;
+    matchedPolicyNumber?: string | null;
   } | null>(null);
 
   // Bundle upload state
@@ -235,6 +239,10 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
         skippedNoName: data.skippedNoName ?? 0,
         skippedConflict: data.skippedConflict ?? 0,
         clientsCreated: data.clientsCreated ?? 0,
+        matched: data.matched ?? false,
+        attached: data.attached ?? 0,
+        matchedClientName: data.matchedClientName ?? null,
+        matchedPolicyNumber: data.matchedPolicyNumber ?? null,
       });
       setStep("done");
       // Refresh router after a short delay to prevent UI freeze
@@ -253,6 +261,19 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
           <CheckCircle2 className="mx-auto text-green-600" size={40} />
           {bulkResult ? (
             <>
+              {bulkResult.matched && (
+                <div className="mt-4 mx-auto max-w-md rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                  <p className="font-semibold">✅ Match found</p>
+                  <p className="mt-0.5">
+                    {bulkResult.matchedClientName
+                      ? `Linked to existing client "${bulkResult.matchedClientName}".`
+                      : "Matched an existing policy by current/previous policy number."}
+                    {bulkResult.attached && bulkResult.attached > 0
+                      ? " This document is now attached — open the client and tap “View” on the policy to see it."
+                      : ""}
+                  </p>
+                </div>
+              )}
               <p className="mt-3 text-lg font-semibold">
                 Imported {bulkResult.created.toLocaleString("en-IN")} new policies
               </p>

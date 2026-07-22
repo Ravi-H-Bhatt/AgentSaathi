@@ -254,12 +254,12 @@ export function AppShell({
           <div className="lg:hidden">
             <Logo withText={false} />
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1.5 sm:gap-2 min-w-0">
             <ClockWidget openSince={openSince} />
             {showAssistant && (
               <button
                 onClick={() => { setDrawerTab("ai"); setDrawerOpen(true); }}
-                className="group flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full bg-foreground text-background hover:opacity-90 hover:scale-105 active:scale-95 transition-all duration-200 sheen"
+                className="group flex items-center gap-2 text-sm font-medium px-3 sm:px-3.5 py-2 rounded-full bg-foreground text-background hover:opacity-90 hover:scale-105 active:scale-95 transition-all duration-200 sheen shrink-0"
               >
                 <Bot size={16} className="transition-transform duration-300 group-hover:rotate-12" />
                 <span className="hidden sm:inline">Ask AI</span>
@@ -271,7 +271,7 @@ export function AppShell({
                 setDrawerOpen(true); 
                 setHasUnread(false);
               }}
-              className="group relative flex items-center gap-2 text-sm font-medium px-3.5 py-2 rounded-full border border-border hover:bg-black/[.04] transition-all duration-200"
+              className="group relative flex items-center gap-2 text-sm font-medium px-3 sm:px-3.5 py-2 rounded-full border border-border hover:bg-black/[.04] transition-all duration-200 shrink-0"
               title="Team Chat"
             >
               <MessageSquare size={16} />

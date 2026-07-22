@@ -2,7 +2,7 @@
 
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { shortDate, companyLabel } from "@/lib/format";
+import { shortDate, companyLabel, getAdjustedRenewalDate } from "@/lib/format";
 import { licModeMonths } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 
@@ -45,7 +45,23 @@ function dueDateForMonth(p: Policy, month: number): string | null {
     const d = new Date(year, month, Math.min(day, dim));
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-  return p.renewal_date;
+  // Non-LIC (annual) policies: show the NEXT upcoming occurrence of the stored
+  // day/month, not the raw stored year. Uses the same canonical recurring logic
+  // as the dashboard — this year's date if it's still ahead (or overdue ≤5d),
+  // otherwise next year's. So a January report run in July correctly shows the
+  // upcoming January (e.g. 2027), while an ongoing/soon month stays current-year.
+  return getAdjustedRenewalDate(p.renewal_date) ?? p.renewal_date;
+}
+
+/**
+ * Renewal date to display in the flat policy listings (per-client report and
+ * book-of-business). Non-LIC annual policies are rolled to their next upcoming
+ * occurrence so no past year is shown; LIC keeps its stored FUP anchor (its own
+ * mode-based cycle is handled elsewhere).
+ */
+function displayRenewal(p: Policy): string | null {
+  if (isLicPolicy(p)) return p.renewal_date;
+  return getAdjustedRenewalDate(p.renewal_date) ?? p.renewal_date;
 }
 
 /** Money formatter for PDFs. jsPDF's built-in Helvetica has no Rupee glyph (₹),
@@ -103,7 +119,7 @@ export function downloadClientPdf(
     p.policy_number || "—",
     pdfMoney(p.sum_insured),
     pdfMoney(p.premium),
-    shortDate(p.renewal_date),
+    shortDate(displayRenewal(p)),
   ]);
 
   autoTable(doc, {
@@ -189,7 +205,7 @@ export function downloadAllClientsPdf(
           p.policy_number || "—",
           pdfMoney(p.sum_insured),
           pdfMoney(p.premium),
-          shortDate(p.renewal_date),
+          shortDate(displayRenewal(p)),
         ]);
       });
     }

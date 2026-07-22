@@ -7,6 +7,75 @@ import type { Policy } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+/**
+ * PATCH a client's editable details (currently the mobile number).
+ * Body: { id: string, phone: string | null }
+ * Owner + colleagues with the "clients" permission may update; scoped to the
+ * active workspace and the caller's owner so no one edits another's data.
+ */
+export async function PATCH(request: NextRequest) {
+  const agent = await getCurrentAgent();
+  if (!agent || agent.status !== "approved") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!permissionsFor(agent).clients) {
+    return NextResponse.json(
+      { error: "You don't have permission to edit clients." },
+      { status: 403 }
+    );
+  }
+
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: unknown;
+    phone?: unknown;
+  };
+  const id = typeof body.id === "string" ? body.id : "";
+  if (!id) {
+    return NextResponse.json({ error: "Missing client id" }, { status: 400 });
+  }
+
+  // Normalize the phone: keep digits (and a leading +), collapse blanks to null.
+  let phone: string | null = null;
+  if (typeof body.phone === "string") {
+    const cleaned = body.phone.replace(/[^\d+]/g, "").trim();
+    phone = cleaned.length > 0 ? cleaned : null;
+  }
+
+  const db = createAdminClient();
+  const ownerId = ownerIdFor(agent);
+  const workspace = await getWorkspace();
+
+  const { data: client } = await db
+    .from("clients")
+    .select("id, full_name")
+    .eq("id", id)
+    .eq("agent_id", ownerId)
+    .eq("workspace", workspace)
+    .maybeSingle();
+  if (!client) {
+    return NextResponse.json({ error: "Client not found" }, { status: 404 });
+  }
+
+  const { error } = await db
+    .from("clients")
+    .update({ phone })
+    .eq("id", id)
+    .eq("agent_id", ownerId)
+    .eq("workspace", workspace);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  await logActivity(
+    agent,
+    "update_client_phone",
+    `${(client as { full_name: string }).full_name}: ${phone || "cleared"}`,
+    workspace
+  );
+
+  return NextResponse.json({ ok: true, phone });
+}
+
 /** Remove stored PDFs for the given policies (best-effort). */
 async function removePolicyFiles(
   db: ReturnType<typeof createAdminClient>,

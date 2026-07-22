@@ -8,7 +8,8 @@ const COOKIE_OPTS = {
   path: "/",
   httpOnly: true,
   sameSite: "lax" as const,
-  maxAge: 60 * 60 * 24 * 365, // remember for a year
+  // Session cookie (no maxAge): the choice lasts while the app/PWA is open,
+  // but clears once it's fully closed — so every fresh open defaults to Home.
 };
 
 /**

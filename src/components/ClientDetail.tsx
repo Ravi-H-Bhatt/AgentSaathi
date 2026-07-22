@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send } from "lucide-react";
+import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check } from "lucide-react";
 import { money, shortDate, companyLabel } from "@/lib/format";
 import { getLicNextDueISO } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
@@ -126,6 +126,43 @@ export function ClientDetail({
     null
   );
 
+  // Inline mobile-number entry for clients that have no phone on file.
+  const [phone, setPhone] = useState<string | null>(client.phone);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [editingPhone, setEditingPhone] = useState(false);
+  const [savingPhone, setSavingPhone] = useState(false);
+
+  async function savePhone() {
+    const value = phoneInput.replace(/[^\d+]/g, "").trim();
+    if (value.length < 7) {
+      setNotice({ type: "err", msg: "Enter a valid mobile number." });
+      return;
+    }
+    setSavingPhone(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/clients", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: client.id, phone: value }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not save number");
+      setPhone(data.phone ?? value);
+      setEditingPhone(false);
+      setPhoneInput("");
+      setNotice({ type: "ok", msg: "Mobile number saved." });
+      router.refresh();
+    } catch (e) {
+      setNotice({
+        type: "err",
+        msg: e instanceof Error ? e.message : "Could not save number.",
+      });
+    } finally {
+      setSavingPhone(false);
+    }
+  }
+
   const projByPolicy = new Map(projections.map((p) => [p.policyId, p]));
 
   /** Open or download the stored PDF via a short-lived signed URL. */
@@ -236,19 +273,69 @@ export function ClientDetail({
               {client.full_name.charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight truncate">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight break-words">
                 {client.full_name}
               </h1>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm text-muted">
+              {/* Phone gets its own line directly below the name. */}
+              <div className="mt-1.5 text-sm text-muted">
+                {phone ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Phone size={14} className="shrink-0" />
+                    <a href={`tel:${phone}`} className="hover:text-foreground transition">
+                      {phone}
+                    </a>
+                  </span>
+                ) : editingPhone ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoFocus
+                      value={phoneInput}
+                      onChange={(e) => setPhoneInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") savePhone();
+                        if (e.key === "Escape") setEditingPhone(false);
+                      }}
+                      placeholder="Enter mobile number"
+                      className="rounded-full border border-border bg-background px-3.5 py-1.5 text-sm outline-none focus:ring-2 focus:ring-foreground/10 w-44"
+                    />
+                    <button
+                      onClick={savePhone}
+                      disabled={savingPhone}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-foreground text-background hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      {savingPhone ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Check size={14} />
+                      )}
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPhone(false);
+                        setPhoneInput("");
+                      }}
+                      className="text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingPhone(true)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-dashed border-border text-muted hover:text-foreground hover:border-foreground/40 transition"
+                  >
+                    <Phone size={14} /> Add mobile number
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-sm text-muted">
                 {client.email && (
                   <span className="inline-flex items-center gap-1 min-w-0">
                     <AtSign size={14} className="shrink-0" />{" "}
                     <span className="break-all">{client.email}</span>
-                  </span>
-                )}
-                {client.phone && (
-                  <span className="inline-flex items-center gap-1">
-                    <Phone size={14} className="shrink-0" /> {client.phone}
                   </span>
                 )}
                 {client.age != null && <span>Age {client.age}</span>}
@@ -338,9 +425,9 @@ export function ClientDetail({
                   key={p.id}
                   className="rounded-2xl border border-border bg-card p-5"
                 >
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                      <p className="font-semibold">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <p className="font-semibold break-words">
                         {p.product_name || p.policy_type || "Policy"}
                         {proj && (
                           <span className="ml-2 inline-block text-xs font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
@@ -348,14 +435,14 @@ export function ClientDetail({
                           </span>
                         )}
                       </p>
-                      <p className="text-sm text-muted">
+                      <p className="text-sm text-muted break-words">
                         {companyLabel(p.company, p.product_name) || "—"} · Policy #{p.policy_number || "No number"}
                         {p.policy_type && p.product_name && p.product_name !== p.policy_type && (
                           <span className="ml-2">· {p.policy_type}</span>
                         )}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
                       {p.source_file_path && (
                         <>
                           <button
@@ -391,7 +478,7 @@ export function ClientDetail({
                           const { webUrl, subject, body } = buildIntimation(
                             p,
                             client.full_name,
-                            client.phone,
+                            phone,
                             p.sum_insured,
                             agentName,
                             agentPhone

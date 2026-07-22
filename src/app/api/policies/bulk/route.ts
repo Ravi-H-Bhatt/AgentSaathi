@@ -118,6 +118,12 @@ export async function POST(request: NextRequest) {
   // policy number (renewal mapping).
   const existingKeys = new Set<string>();
   const clientIdByPolicyNumber = new Map<string, string>();
+  // policy_number → the stored policy row (id + current file + owning client),
+  // so an uploaded document can be attached to the exact matching policy.
+  const policyByNumber = new Map<
+    string,
+    { id: string; source_file_path: string | null; client_id: string }
+  >();
   {
     let from = 0;
     const pageSize = 1000;
@@ -125,7 +131,7 @@ export async function POST(request: NextRequest) {
       const { data } = await db
         .from("policies")
         .select(
-          "policy_number, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id"
+          "id, policy_number, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id, source_file_path"
         )
         .eq("agent_id", ownerId)
         .eq("workspace", workspace)
@@ -136,6 +142,13 @@ export async function POST(request: NextRequest) {
         const cname = clientNameById.get(p.client_id) || "";
         if (p.policy_number && p.client_id) {
           clientIdByPolicyNumber.set(String(p.policy_number).trim(), p.client_id);
+        }
+        if (p.policy_number) {
+          policyByNumber.set(String(p.policy_number).trim(), {
+            id: p.id,
+            source_file_path: p.source_file_path ?? null,
+            client_id: p.client_id,
+          });
         }
         existingKeys.add(
           rowKey(
@@ -213,6 +226,41 @@ export async function POST(request: NextRequest) {
   
   console.log(`[bulk] Filtered: ${toImport.length} to import, ${duplicates} duplicates out of ${valid.length} valid`);
 
+  // ---- Match & document attach (individual policy schedules) ----
+  // For a schedule/renewal document (a row carrying a previous policy number):
+  //   • "match found" if its CURRENT or PREVIOUS number already exists in the DB.
+  //   • If the CURRENT policy is already stored, attach THIS uploaded PDF to that
+  //     existing policy so clicking "View" on its card opens this document
+  //     (instead of showing nothing / the register it came from).
+  // Registers never set previous_policy_number, so this can't affect them.
+  let attached = 0;
+  let matched = false;
+  let matchedClientName: string | null = null;
+  let matchedPolicyNumber: string | null = null;
+  for (const r of valid) {
+    if (!r.previous_policy_number) continue;
+    const cur = r.policy_number?.toString().trim() || "";
+    const prev = r.previous_policy_number?.toString().trim() || "";
+    const curMatch = cur ? policyByNumber.get(cur) : undefined;
+    const prevMatch = prev ? policyByNumber.get(prev) : undefined;
+    if (curMatch || prevMatch) {
+      matched = true;
+      const who = (curMatch || prevMatch)!;
+      matchedClientName = clientNameById.get(who.client_id) || matchedClientName;
+      matchedPolicyNumber = matchedPolicyNumber || cur || prev || null;
+    }
+    // Backfill the document onto the already-stored current policy.
+    if (body.source_file_path && curMatch) {
+      const { error: attachErr } = await db
+        .from("policies")
+        .update({ source_file_path: body.source_file_path })
+        .eq("id", curMatch.id)
+        .eq("agent_id", ownerId)
+        .eq("workspace", workspace);
+      if (!attachErr) attached++;
+    }
+  }
+
   if (toImport.length === 0) {
     return NextResponse.json({
       ok: true,
@@ -221,7 +269,15 @@ export async function POST(request: NextRequest) {
       skippedNoName,
       skippedConflict: 0,
       clientsCreated: 0,
-      message: "Nothing new to import — all policies already exist.",
+      matched,
+      attached,
+      matchedClientName,
+      matchedPolicyNumber,
+      message: matched
+        ? attached > 0
+          ? "Match found — document attached to the existing policy."
+          : "Match found — this policy already exists."
+        : "Nothing new to import — all policies already exist.",
     });
   }
 
@@ -376,5 +432,9 @@ export async function POST(request: NextRequest) {
     skippedNoName,
     skippedConflict,
     clientsCreated,
+    matched,
+    attached,
+    matchedClientName,
+    matchedPolicyNumber,
   });
 }

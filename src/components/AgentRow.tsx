@@ -32,8 +32,8 @@ export function AgentRow({
         : "bg-amber-50 text-amber-700";
 
   return (
-    <div className="flex items-center justify-between px-5 py-4 gap-4">
-      <div className="flex items-center gap-3 min-w-0">
+    <div className="flex items-center justify-between px-5 py-4 gap-3 flex-wrap">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
         <div className="h-9 w-9 rounded-full bg-foreground text-background flex items-center justify-center text-sm font-semibold shrink-0">
           {(name || email).charAt(0).toUpperCase()}
         </div>
@@ -45,7 +45,7 @@ export function AgentRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge}`}>
           {status}
         </span>
