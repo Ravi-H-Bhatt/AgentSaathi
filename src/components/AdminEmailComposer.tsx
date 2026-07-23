@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Bot, Mail, ArrowUp, Users, Check, ChevronDown } from "lucide-react";
+import { Bot, Mail, ArrowUp, Users, Check, ChevronDown, FileText } from "lucide-react";
+import { WELCOME_EMAIL } from "@/lib/welcomeEmail";
 
 interface EmailRecipient {
   id: string;
@@ -283,6 +284,23 @@ export function AdminEmailComposer() {
             <p className="text-xs text-muted mt-2">
               {chosen.length} recipient{chosen.length === 1 ? "" : "s"} will receive this email.
             </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Templates</label>
+            <button
+              onClick={() => {
+                setSubject(WELCOME_EMAIL.subject);
+                setBody(WELCOME_EMAIL.body);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left border border-border rounded-lg hover:border-foreground/30 hover:bg-black/[.02] transition"
+            >
+              <FileText size={15} className="shrink-0" />
+              <span>
+                <span className="font-medium">Welcome &amp; Getting Started</span>
+                <span className="text-muted"> — autofills the onboarding email</span>
+              </span>
+            </button>
           </div>
 
           <div>

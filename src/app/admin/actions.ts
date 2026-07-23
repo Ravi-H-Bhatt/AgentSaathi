@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { setMaintenance } from "@/lib/settings";
+import { sendWelcomeEmail } from "@/lib/mailer";
 import type { AgentStatus } from "@/lib/types";
 
 /** Admin-only: toggle global maintenance ("work in progress") mode. */
@@ -21,8 +22,22 @@ export async function setAgentStatus(agentId: string, status: AgentStatus) {
     throw new Error("Forbidden");
   }
   const db = createAdminClient();
+
+  // Read the current row so we only send the welcome email on the transition
+  // into "approved" (not on every re-save of an already-approved agent).
+  const { data: before } = await db
+    .from("agents")
+    .select("status, email")
+    .eq("id", agentId)
+    .eq("role", "agent")
+    .maybeSingle();
+
   await db.from("agents").update({ status }).eq("id", agentId).eq("role", "agent");
   revalidatePath("/admin");
+
+  if (status === "approved" && before?.status !== "approved" && before?.email) {
+    await sendWelcomeEmail(before.email);
+  }
 }
 
 /**
@@ -39,12 +54,24 @@ export async function setColleagueStatus(
     throw new Error("Forbidden");
   }
   const db = createAdminClient();
+
+  const { data: before } = await db
+    .from("agents")
+    .select("status, email")
+    .eq("id", colleagueId)
+    .eq("role", "colleague")
+    .maybeSingle();
+
   await db
     .from("agents")
     .update({ status })
     .eq("id", colleagueId)
     .eq("role", "colleague");
   revalidatePath("/admin");
+
+  if (status === "approved" && before?.status !== "approved" && before?.email) {
+    await sendWelcomeEmail(before.email);
+  }
 }
 
 /** Admin-only: add a premium chart row. */

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/mailer";
 import { Logo } from "@/components/Logo";
 import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { Shield } from "lucide-react";
@@ -115,6 +116,10 @@ export default async function InvitePage({
       accepted_at: new Date().toISOString(),
     })
     .eq("id", invite.id);
+
+  // Newly-approved colleague — send the onboarding email once (best-effort).
+  // Must run BEFORE redirect(), which throws to perform the navigation.
+  if (agent!.email) await sendWelcomeEmail(agent!.email);
 
   redirect("/dashboard");
 }
