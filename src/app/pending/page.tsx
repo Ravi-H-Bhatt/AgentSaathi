@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { getCurrentAgent } from "@/lib/auth";
+import { ApprovalWatcher } from "@/components/ApprovalWatcher";
 
 export default async function PendingPage() {
   const agent = await getCurrentAgent();
@@ -12,6 +13,8 @@ export default async function PendingPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center grid-bg px-6">
+      {/* Auto-redirects to the dashboard the moment the admin approves — no reload. */}
+      {!rejected && <ApprovalWatcher />}
       <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-sm text-center">
         <div className="flex justify-center mb-6">
           <Logo />

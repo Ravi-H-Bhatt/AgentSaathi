@@ -197,15 +197,13 @@ export function ClientDetail({
    * To / CC / Subject / Body fields. CC is left blank for the agent to fill.
    */
   function emailClient() {
-    if (!client.email) {
-      setNotice({ type: "err", msg: "This client has no email address on file." });
-      return;
-    }
     try {
       sessionStorage.setItem(
         "agentsaathi_email_prefill",
         JSON.stringify({
-          to: client.email,
+          // Prefill the client's email when we have it; otherwise leave To blank
+          // for the agent to type in.
+          to: client.email || "",
           cc: "",
           subject: "",
           body: `Dear ${client.full_name},\n\n`,
@@ -218,15 +216,21 @@ export function ClientDetail({
   }
 
   // Reusable "Email" action shown next to the client's phone/contact details.
-  const emailBtn = client.email ? (
+  // Always available: opens the composer prefilled with the client's email
+  // (or blank To when none is on file).
+  const emailBtn = (
     <button
       onClick={emailClient}
       className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-blue-200 text-blue-700 hover:bg-blue-50 transition"
-      title={`Compose an email to ${client.email}`}
+      title={
+        client.email
+          ? `Compose an email to ${client.email}`
+          : "Compose an email (add the recipient in To)"
+      }
     >
       <Mail size={14} /> Email
     </button>
-  ) : null;
+  );
 
   const projByPolicy = new Map(projections.map((p) => [p.policyId, p]));
 
