@@ -197,6 +197,57 @@ export function ClientDetail({
    * To / CC / Subject / Body fields. CC is left blank for the agent to fill.
    */
   function emailClient() {
+    // Build a detailed body from the stored/extracted data. Any field that is
+    // missing (null/empty) is skipped entirely — no blank or "null" lines.
+    const lines: string[] = [`Dear ${client.full_name},`, ""];
+    lines.push("Please find below the details of your policy as per our records:");
+
+    // Client-level contact details (only what's on file).
+    const clientLines: string[] = [];
+    if (mobile) clientLines.push(`- Phone: +91 ${mobile}`);
+    else if (client.phone) clientLines.push(`- Phone: ${client.phone}`);
+    if (client.email) clientLines.push(`- Email: ${client.email}`);
+    if (client.age != null) clientLines.push(`- Age: ${client.age}`);
+    if (clientLines.length > 0) {
+      lines.push("", "Client Details:", ...clientLines);
+    }
+
+    // One block per policy, numbered. Empty fields are omitted.
+    client.policies.forEach((p, i) => {
+      const company = companyLabel(p.company, p.product_name);
+      const title = p.product_name || company || "Policy";
+      const block: string[] = [];
+      if (company) block.push(`- Insurance Company: ${company}`);
+      if (p.policy_type) block.push(`- Policy Type: ${p.policy_type}`);
+      if (p.policy_holder_type)
+        block.push(`- Policy Holder Type: ${p.policy_holder_type}`);
+      if (p.policy_number) block.push(`- Policy Number: ${p.policy_number}`);
+      if (p.sum_insured != null) block.push(`- Sum Insured: ${money(p.sum_insured)}`);
+      if (p.premium != null) block.push(`- Premium: ${money(p.premium)}`);
+      if (p.mode) block.push(`- Payment Mode: ${p.mode}`);
+      if (p.start_date) block.push(`- Start Date: ${shortDate(p.start_date)}`);
+      if (p.renewal_date) block.push(`- Renewal Date: ${shortDate(p.renewal_date)}`);
+      if (p.client_address) block.push(`- Address: ${p.client_address}`);
+      if (block.length > 0) {
+        lines.push("", `Policy ${i + 1} — ${title}`, ...block);
+      }
+    });
+
+    lines.push(
+      "",
+      "If you have any questions or need any assistance regarding your policy, please feel free to reach out."
+    );
+
+    const firstCompany = companyLabel(
+      client.policies[0]?.company,
+      client.policies[0]?.product_name
+    );
+    const subject = client.policies[0]?.product_name
+      ? `Your Policy Details — ${client.policies[0].product_name}`
+      : firstCompany
+        ? `Your Policy Details — ${firstCompany}`
+        : "Your Policy Details";
+
     try {
       sessionStorage.setItem(
         "agentsaathi_email_prefill",
@@ -205,8 +256,8 @@ export function ClientDetail({
           // for the agent to type in.
           to: client.email || "",
           cc: "",
-          subject: "",
-          body: `Dear ${client.full_name},\n\n`,
+          subject,
+          body: lines.join("\n"),
         })
       );
     } catch {
