@@ -191,6 +191,43 @@ export function ClientDetail({
     }
   }
 
+  /**
+   * Jump to the email composer (/email) with this client's details pre-filled.
+   * The composer reads this payload from sessionStorage on mount and fills the
+   * To / CC / Subject / Body fields. CC is left blank for the agent to fill.
+   */
+  function emailClient() {
+    if (!client.email) {
+      setNotice({ type: "err", msg: "This client has no email address on file." });
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        "agentsaathi_email_prefill",
+        JSON.stringify({
+          to: client.email,
+          cc: "",
+          subject: "",
+          body: `Dear ${client.full_name},\n\n`,
+        })
+      );
+    } catch {
+      // ignore storage errors — the composer will just open empty
+    }
+    router.push("/email");
+  }
+
+  // Reusable "Email" action shown next to the client's phone/contact details.
+  const emailBtn = client.email ? (
+    <button
+      onClick={emailClient}
+      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-blue-200 text-blue-700 hover:bg-blue-50 transition"
+      title={`Compose an email to ${client.email}`}
+    >
+      <Mail size={14} /> Email
+    </button>
+  ) : null;
+
   const projByPolicy = new Map(projections.map((p) => [p.policyId, p]));
 
   /** Open or download the stored PDF via a short-lived signed URL. */
@@ -371,6 +408,7 @@ export function ClientDetail({
                         <MessageCircle size={14} /> WhatsApp
                       </a>
                     )}
+                    {emailBtn}
                     {/* Only manually-entered numbers are editable; extracted stay fixed. */}
                     {phoneManual && (
                       <button
@@ -382,15 +420,18 @@ export function ClientDetail({
                     )}
                   </div>
                 ) : (
-                  <button
-                    onClick={() => {
-                      setPhoneInput("");
-                      setEditingPhone(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-dashed border-border text-muted hover:text-foreground hover:border-foreground/40 transition"
-                  >
-                    <Phone size={14} /> Add mobile number
-                  </button>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => {
+                        setPhoneInput("");
+                        setEditingPhone(true);
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-dashed border-border text-muted hover:text-foreground hover:border-foreground/40 transition"
+                    >
+                      <Phone size={14} /> Add mobile number
+                    </button>
+                    {emailBtn}
+                  </div>
                 )}
               </div>
               <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-sm text-muted">
