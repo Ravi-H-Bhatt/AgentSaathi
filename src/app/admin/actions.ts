@@ -25,6 +25,28 @@ export async function setAgentStatus(agentId: string, status: AgentStatus) {
   revalidatePath("/admin");
 }
 
+/**
+ * Admin-only: revoke or restore a colleague's access.
+ * Colleagues join through an agent's invite link (no admin approval needed),
+ * so there is no "pending" step — the admin can only revoke (block) or restore.
+ */
+export async function setColleagueStatus(
+  colleagueId: string,
+  status: "approved" | "rejected"
+) {
+  const me = await getCurrentAgent();
+  if (!me || me.role !== "admin") {
+    throw new Error("Forbidden");
+  }
+  const db = createAdminClient();
+  await db
+    .from("agents")
+    .update({ status })
+    .eq("id", colleagueId)
+    .eq("role", "colleague");
+  revalidatePath("/admin");
+}
+
 /** Admin-only: add a premium chart row. */
 export async function addPremiumRow(formData: FormData) {
   const me = await getCurrentAgent();

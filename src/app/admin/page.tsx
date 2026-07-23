@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { shortDate } from "@/lib/format";
 import { getMaintenance } from "@/lib/settings";
 import { AgentRow } from "@/components/AgentRow";
+import { ColleagueRow } from "@/components/ColleagueRow";
 import { MaintenanceToggle } from "@/components/MaintenanceToggle";
 import type { Agent } from "@/lib/types";
 
@@ -18,6 +19,19 @@ export default async function AdminAgentsPage() {
   const agents = (data as Agent[]) || [];
   const pending = agents.filter((a) => a.status === "pending");
   const others = agents.filter((a) => a.status !== "pending");
+
+  // Colleagues join through an agent's invite link (no admin approval), but the
+  // admin can still see them all and revoke access if needed.
+  const { data: collData } = await db
+    .from("agents")
+    .select("*")
+    .eq("role", "colleague")
+    .order("created_at", { ascending: false });
+  const colleagues = (collData as Agent[]) || [];
+
+  // Map owner id -> display name so we can show which agent each colleague is under.
+  const ownerNameById = new Map<string, string>();
+  for (const a of agents) ownerNameById.set(a.id, a.full_name || a.email);
 
   let maintenance = { active: false, message: null as string | null };
   try {
@@ -84,6 +98,40 @@ export default async function AdminAgentsPage() {
                 email={a.email}
                 status={a.status}
                 signedUp={shortDate(a.created_at)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h2 className="font-semibold mb-3">
+          Colleagues{" "}
+          <span className="text-muted font-normal">({colleagues.length})</span>
+        </h2>
+        <p className="text-sm text-muted mb-3">
+          Colleagues join through an agent&apos;s invite link, so they don&apos;t
+          need approval. You can revoke their access here.
+        </p>
+        {colleagues.length === 0 ? (
+          <div className="rounded-2xl border border-border bg-card py-10 text-center text-muted text-sm">
+            No colleagues yet.
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card divide-y divide-border overflow-hidden">
+            {colleagues.map((c) => (
+              <ColleagueRow
+                key={c.id}
+                id={c.id}
+                name={c.full_name}
+                email={c.email}
+                ownerName={
+                  c.parent_agent_id
+                    ? ownerNameById.get(c.parent_agent_id) || null
+                    : null
+                }
+                status={c.status}
+                joined={shortDate(c.created_at)}
               />
             ))}
           </div>

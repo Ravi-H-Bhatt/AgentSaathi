@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, BarChart3, LogOut, Flag, Activity, MessageSquare, X } from "lucide-react";
+import { Users, BarChart3, LogOut, Flag, Activity, MessageSquare, Mail, X } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { NotificationToggle } from "@/components/NotificationToggle";
 import { TeamChat } from "@/components/TeamChat";
+import { AdminEmailComposer } from "@/components/AdminEmailComposer";
 
 const nav = [
   { href: "/admin", label: "Agents", icon: Users },
@@ -26,6 +27,7 @@ export function AdminShell({
 }) {
   const pathname = usePathname();
   const [chatOpen, setChatOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -41,6 +43,14 @@ export function AdminShell({
             <span className="text-sm text-muted hidden sm:block">
               {agentEmail}
             </span>
+            <button
+              onClick={() => setEmailOpen(true)}
+              className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-full border border-border hover:bg-black/[.03] transition"
+              title="Send an email to agents or colleagues"
+            >
+              <Mail size={15} />
+              <span className="hidden sm:inline">Email</span>
+            </button>
             <button
               onClick={() => setChatOpen(true)}
               className="inline-flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-full border border-border hover:bg-black/[.03] transition"
@@ -118,6 +128,33 @@ export function AdminShell({
             </div>
             <div className="flex-1 min-h-0">
               <TeamChat currentUserId={agentId} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Email drawer: admin broadcasts an email to agents/colleagues. */}
+      {emailOpen && (
+        <>
+          <div
+            onClick={() => setEmailOpen(false)}
+            className="fixed inset-0 bg-black/30 z-50"
+          />
+          <div className="fixed right-0 top-0 bottom-0 z-50 w-full sm:w-[720px] max-w-full bg-card border-l border-border flex flex-col shadow-xl">
+            <div className="min-h-16 pt-[env(safe-area-inset-top)] px-4 flex items-center justify-between border-b border-border shrink-0">
+              <h2 className="font-semibold flex items-center gap-2">
+                <Mail size={18} /> Email agents &amp; colleagues
+              </h2>
+              <button
+                onClick={() => setEmailOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-black/[.04]"
+                aria-label="Close email"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 p-4">
+              <AdminEmailComposer />
             </div>
           </div>
         </>
