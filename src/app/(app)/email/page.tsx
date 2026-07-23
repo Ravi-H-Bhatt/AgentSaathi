@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Save, Trash2, Mail, Bot, Paperclip, X, ArrowUp } from "lucide-react";
+import { Save, Trash2, Mail, Bot, Paperclip, X, ArrowUp, FileText } from "lucide-react";
 
 interface Draft {
   id: string;
@@ -22,6 +22,56 @@ const SUGGESTIONS = [
   { title: "Write a follow-up email", sub: "about a pending payment" },
   { title: "Compose a thank-you note", sub: "for a new policy purchase" },
   { title: "Create a birthday wish", sub: "for a valued client" },
+];
+
+// One-click quick-fill templates for common client emails. Placeholders in
+// [brackets] are meant to be edited by the agent before sending. No sign-off —
+// the send pipeline appends "Best regards, <agent name>".
+const CLIENT_TEMPLATES: { label: string; subject: string; body: string }[] = [
+  {
+    label: "Renewal reminder",
+    subject: "Your policy renewal is coming up",
+    body: `Dear [Client Name],
+
+I hope you're doing well. This is a friendly reminder that your policy [Policy Number] is due for renewal on [Renewal Date].
+
+To ensure your coverage continues without interruption, please complete the renewal before the due date. I'd be happy to help you with the process or answer any questions you may have.
+
+Please feel free to reach out at your convenience.`,
+  },
+  {
+    label: "Payment follow-up",
+    subject: "Reminder: Pending premium payment",
+    body: `Dear [Client Name],
+
+I wanted to follow up regarding the pending premium payment for your policy [Policy Number], which is still outstanding as of today.
+
+Kindly complete the payment at your earliest convenience to keep your policy active. If you have already made the payment, please disregard this message.
+
+Do let me know if you need any assistance.`,
+  },
+  {
+    label: "Thank you",
+    subject: "Thank you for choosing us",
+    body: `Dear [Client Name],
+
+Thank you for placing your trust in us and purchasing your new policy [Policy Number]. We're delighted to have you covered.
+
+If you have any questions about your policy or need any assistance, please don't hesitate to reach out. We're always here to help.
+
+Wishing you peace of mind and security ahead.`,
+  },
+  {
+    label: "Birthday wish",
+    subject: "Happy Birthday!",
+    body: `Dear [Client Name],
+
+Wishing you a very happy birthday! On behalf of our entire team, we hope your day is filled with joy and happiness.
+
+Thank you for being a valued client. We truly appreciate your continued trust and look forward to serving you.
+
+Have a wonderful year ahead!`,
+  },
 ];
 
 export default function EmailPage() {
@@ -312,6 +362,26 @@ export default function EmailPage() {
               placeholder="cc@example.com (optional)"
               className="w-full px-4 py-2.5 text-sm border border-border rounded-lg outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground transition"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+              <FileText size={14} /> Quick templates
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {CLIENT_TEMPLATES.map((t) => (
+                <button
+                  key={t.label}
+                  onClick={() => {
+                    setSubject(t.subject);
+                    setBody(t.body);
+                  }}
+                  className="px-3 py-1.5 text-xs font-medium border border-border rounded-full hover:border-foreground/30 hover:bg-black/[.03] transition"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>
