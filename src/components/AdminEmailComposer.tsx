@@ -354,6 +354,25 @@ export function AdminEmailComposer() {
           {aiMessages.length === 0 ? (
             <div className="h-full flex flex-col">
               <div className="flex-1" />
+              <button
+                onClick={() => {
+                  setSubject(WELCOME_EMAIL.subject);
+                  setBody(WELCOME_EMAIL.body);
+                  setSuccess("Onboarding email loaded — pick recipients and send.");
+                  setTimeout(() => setSuccess(null), 3000);
+                }}
+                className="text-left p-4 rounded-xl border border-foreground bg-foreground/[.03] hover:bg-foreground/[.06] transition mb-3 flex items-start gap-3"
+              >
+                <FileText size={18} className="shrink-0 mt-0.5" />
+                <span>
+                  <p className="text-sm font-medium text-foreground">
+                    Welcome &amp; Getting Started
+                  </p>
+                  <p className="text-xs text-muted mt-0.5">
+                    Autofills the ready-made onboarding email
+                  </p>
+                </span>
+              </button>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                 {SUGGESTIONS.map((s, i) => (
                   <button

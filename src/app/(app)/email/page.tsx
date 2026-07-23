@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Save, Trash2, Mail, Bot, Paperclip, X, ArrowUp, FileText } from "lucide-react";
-import { WELCOME_EMAIL } from "@/lib/welcomeEmail";
+import { Save, Trash2, Mail, Bot, Paperclip, X, ArrowUp } from "lucide-react";
 
 interface Draft {
   id: string;
@@ -313,23 +312,6 @@ export default function EmailPage() {
               placeholder="cc@example.com (optional)"
               className="w-full px-4 py-2.5 text-sm border border-border rounded-lg outline-none focus:ring-2 focus:ring-foreground/20 focus:border-foreground transition"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Templates</label>
-            <button
-              onClick={() => {
-                setSubject(WELCOME_EMAIL.subject);
-                setBody(WELCOME_EMAIL.body);
-              }}
-              className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left border border-border rounded-lg hover:border-foreground/30 hover:bg-black/[.02] transition"
-            >
-              <FileText size={15} className="shrink-0" />
-              <span>
-                <span className="font-medium">Welcome &amp; Getting Started</span>
-                <span className="text-muted"> — autofills the onboarding email</span>
-              </span>
-            </button>
           </div>
 
           <div>
