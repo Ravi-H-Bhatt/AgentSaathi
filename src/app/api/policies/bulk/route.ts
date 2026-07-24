@@ -123,11 +123,38 @@ export async function POST(request: NextRequest) {
       dateKey(renewalDate),
     ].join("|");
 
+  // "All other details" key — EXCLUDES the policy number. Used so a row whose
+  // policy number differs (or is blank) but whose every other field matches an
+  // existing policy is still treated as a duplicate and skipped.
+  const detailKey = (
+    clientName: string,
+    company: string | null,
+    productName: string | null,
+    policyType: string | null,
+    premium: number | string | null,
+    sumInsured: number | string | null,
+    startDate: string | null,
+    renewalDate: string | null
+  ): string =>
+    [
+      nameKey(clientName),
+      (company || "").trim().toLowerCase(),
+      (productName || "").trim().toLowerCase(),
+      (policyType || "").trim().toLowerCase(),
+      numKey(premium),
+      numKey(sumInsured),
+      dateKey(startDate),
+      dateKey(renewalDate),
+    ].join("|");
+
   // ---- 1. Build set of existing policy keys (paginated over ALL policies). ----
   // Also map every stored policy_number → its client_id, so an uploaded renewal
   // can be attached to the client who already holds the current OR previous
   // policy number (renewal mapping).
   const existingKeys = new Set<string>();
+  // Keys of every existing policy WITHOUT its policy number, so a differing /
+  // blank policy number with otherwise-identical details is caught as a dup.
+  const existingDetailKeys = new Set<string>();
   const clientIdByPolicyNumber = new Map<string, string>();
   // policy_number → the stored policy row (id + current file + owning client),
   // so an uploaded document can be attached to the exact matching policy.
@@ -142,7 +169,7 @@ export async function POST(request: NextRequest) {
       const { data } = await db
         .from("policies")
         .select(
-          "id, policy_number, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id, source_file_path"
+          "id, policy_number, company, product_name, policy_type, premium, sum_insured, start_date, renewal_date, client_id, source_file_path"
         )
         .eq("agent_id", ownerId)
         .eq("workspace", workspace)
@@ -165,6 +192,18 @@ export async function POST(request: NextRequest) {
           rowKey(
             cname,
             p.policy_number,
+            p.product_name,
+            p.policy_type,
+            p.premium,
+            p.sum_insured,
+            p.start_date,
+            p.renewal_date
+          )
+        );
+        existingDetailKeys.add(
+          detailKey(
+            cname,
+            p.company,
             p.product_name,
             p.policy_type,
             p.premium,
@@ -203,6 +242,7 @@ export async function POST(request: NextRequest) {
   // Track keys accepted in THIS batch so two identical rows in the same upload
   // can't both insert (bulletproof in-file dedup, on top of the DB check).
   const batchSeen = new Set<string>();
+  const batchDetailSeen = new Set<string>();
   const toImport = valid.filter((r) => {
     // A schedule/renewal row (carries a previous policy number) whose CURRENT
     // OR PREVIOUS policy number already exists → DO NOT create a new detail.
@@ -225,18 +265,35 @@ export async function POST(request: NextRequest) {
       r.start_date,
       r.renewal_date
     );
-    // Duplicate if it's already in the DB, OR already accepted earlier in this
-    // same upload.
-    if (existingKeys.has(key) || batchSeen.has(key)) {
+    // Key ignoring the policy number: catches a row whose policy number differs
+    // (or is blank) but whose every other detail matches an existing/earlier row.
+    const dkey = detailKey(
+      r.client_name!,
+      r.company ?? null,
+      r.product_name,
+      r.policy_type,
+      r.premium,
+      r.sum_insured,
+      r.start_date,
+      r.renewal_date
+    );
+    // Duplicate if — already in the DB (full key OR all-other-details key), or
+    // already accepted earlier in this same upload (either key).
+    if (
+      existingKeys.has(key) ||
+      existingDetailKeys.has(dkey) ||
+      batchSeen.has(key) ||
+      batchDetailSeen.has(dkey)
+    ) {
       console.log('[bulk] Skipping duplicate:', {
         name: r.client_name,
         policy: r.policy_number,
         premium: r.premium,
-        key: key.substring(0, 100),
       });
       return false;
     }
     batchSeen.add(key);
+    batchDetailSeen.add(dkey);
     return true;
   });
   const duplicates = valid.length - toImport.length;

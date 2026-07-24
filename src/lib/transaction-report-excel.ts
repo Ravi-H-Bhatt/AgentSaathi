@@ -125,7 +125,8 @@ export function parseTransactionReportExcel(buffer: Buffer): RegisterRow[] {
     colOf[field] != null ? row[colOf[field]] : undefined;
 
   const rows: RegisterRow[] = [];
-  const seen = new Set<string>();
+  const seenPolicy = new Set<string>(); // by policy number
+  const seenDetail = new Set<string>(); // by all-other-details (no policy no.)
 
   for (let i = headerRow + 1; i < data.length; i++) {
     const row = data[i];
@@ -144,24 +145,22 @@ export function parseTransactionReportExcel(buffer: Buffer): RegisterRow[] {
     const renewalDate = toISODate(get(row, "renewal_date"));
     const premium = toNumber(get(row, "premium"));
 
-    // Bulletproof in-file dedupe:
-    //  • If a policy number exists, it is the identity — one policy number is
-    //    stored ONCE (rows repeating it, even with different premium/dates,
-    //    collapse to the first occurrence).
-    //  • If the policy number is blank, fall back to a full composite of every
-    //    identifying field so only truly-identical rows collapse.
-    const key = policyNumber
-      ? `pn:${policyNumber.toLowerCase()}`
-      : `cx:${[
-          clientName.toLowerCase(),
-          (company || "").toLowerCase(),
-          (policyType || "").toLowerCase(),
-          premium == null ? "" : String(premium),
-          startDate || "",
-          renewalDate || "",
-        ].join("|")}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    // Bulletproof in-file dedupe — a row is dropped if EITHER:
+    //  • its policy number was already seen (one policy number = one entry), OR
+    //  • all its other details (client, company, type, premium, dates) match an
+    //    earlier row — even when the policy number differs or is blank.
+    const detailK = [
+      clientName.toLowerCase(),
+      (company || "").toLowerCase(),
+      (policyType || "").toLowerCase(),
+      premium == null ? "" : String(premium),
+      startDate || "",
+      renewalDate || "",
+    ].join("|");
+    const pnK = policyNumber ? policyNumber.toLowerCase() : null;
+    if ((pnK && seenPolicy.has(pnK)) || seenDetail.has(detailK)) continue;
+    if (pnK) seenPolicy.add(pnK);
+    seenDetail.add(detailK);
 
     rows.push({
       sn: null,
