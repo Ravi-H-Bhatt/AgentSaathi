@@ -14,11 +14,14 @@ import { licModeLabel } from "@/lib/lic-renewal";
  *   - D.o.C         → start_date (Date of Commencement; gives the due DAY)
  *   - Pln/Tm        → policy_type (plan/term, e.g. "945/69")
  *   - Mod           → mode (normalised to Monthly/Quarterly/Half-Yearly/Yearly)
- *   - FUP (MM/YYYY) → renewal anchor (D.o.C day + FUP month/year)
+ *   - D.o.C + Mode  → renewal_date (calculated from start date + payment mode)
  *   - InstPrem      → premium (the recurring installment amount)
- *   - TotPrem, Due  → kept in raw_extract (this report's arrears total & count)
+ *   - TotPrem, Due, FUP → kept in raw_extract (report metadata)
  *
  * GST (always 0) and EstCom (commission) are intentionally discarded.
+ *
+ * NOTE: FUP (First Unpaid Premium) from the report is stored in raw_extract
+ * for reference only. Renewal dates are calculated PURELY from D.o.C + Mode.
  *
  * The parser is fully deterministic (no AI) so extraction is bulletproof and
  * repeatable. It tolerates the messy PDF text layer: names glued to the D.o.C
@@ -220,7 +223,13 @@ function parseRecord(
   const rawMode = modeIdx !== -1 ? tokens[modeIdx] : null;
   const mode = licModeLabel(rawMode);
   const fup = tokens[fupIdx];
-  const fupDate = fupToAnchorIso(fup, docIso);
+  
+  // Calculate renewal date from D.o.C + Mode (NOT from FUP)
+  const renewalDate = (() => {
+    if (!docIso || !mode) return null;
+    const { getLicNextDueISO } = require("@/lib/lic-renewal");
+    return getLicNextDueISO(docIso, mode);
+  })();
 
   // Numeric tail after FUP (skipping an optional flag):
   //   InstPrem(dec)  Due(int)  GST(dec)  TotPrem(int)  [EstCom(dec) — ignored]
@@ -268,12 +277,12 @@ function parseRecord(
     product_name: null,
     mode,
     start_date: docIso,
-    renewal_date: fupDate,
+    renewal_date: renewalDate, // Calculated from D.o.C + Mode
     premium: instPrem,
     sum_insured: null,
     // LIC-specific extras (carried to the save endpoint, kept in raw_extract).
-    fup,
-    fup_date: fupDate,
+    fup, // Stored for reference only, not used for renewals
+    fup_date: null, // No longer calculated
     inst_prem: instPrem,
     tot_prem: totPrem,
     due_count: dueCount,

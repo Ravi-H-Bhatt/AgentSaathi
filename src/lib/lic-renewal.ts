@@ -7,12 +7,15 @@
  *   Half-Yearly (Hly) → every 6 months
  *   Yearly (Yly) → every 12 months
  *
- * The due DAY comes from the Date of Commencement (D.o.C). The FUP ("First
- * Unpaid Premium", MM/YYYY on the report) tells us the earliest unpaid month.
- * The stored `renewal_date` is the FUP anchor (D.o.C day + FUP month/year).
- * From that anchor we step forward by the mode interval to find the next due
- * date on/after today, so a monthly policy surfaces every month, a quarterly
- * one every three months, etc.
+ * The due DAY comes from the Date of Commencement (D.o.C). The next renewal
+ * date is calculated PURELY from D.o.C + Mode, stepping forward by the mode
+ * interval to find the next due date on/after today.
+ *
+ * For example:
+ *   - D.o.C: 28/08/2022
+ *   - Mode: Monthly
+ *   - Today: 25/07/2026
+ *   - Next due: 28/07/2026 (3 days from today)
  *
  * These are pure functions (safe on client and server).
  */
@@ -72,6 +75,9 @@ const OVERDUE_GRACE_DAYS = 5;
  * is given (an installment already collected), the result is the first
  * occurrence strictly AFTER that date, so a collected premium rolls to the
  * next cycle. Returns null when inputs are unusable.
+ *
+ * NOTE: This calculation is PURELY based on D.o.C + Mode. FUP (First Unpaid
+ * Premium) from reports is NOT used for renewal calculation.
  */
 export function nextLicDueDate(
   docISO: string | null | undefined,

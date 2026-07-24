@@ -609,10 +609,10 @@ export function ClientDetail({
             {client.policies.map((p: Policy) => {
               const proj = projByPolicy.get(p.id);
               // LIC policies (from a Premium Due List) show LIC-specific fields:
-              // D.o.C, Plan/Term, Mode, FUP and the mode-aware next due date.
+              // D.o.C, Plan/Term, Mode, Total Premium and the mode-aware next due date.
               const raw = p.raw_extract as {
                 source?: string;
-                fup?: string;
+                tot_prem?: number;
                 paid_through?: string;
               } | null;
               const isLic = raw?.source === "lic_premium_due";
@@ -731,7 +731,10 @@ export function ClientDetail({
                         label="Premium (installment)"
                         value={money(p.premium)}
                       />
-                      <Field label="FUP" value={raw?.fup || "—"} />
+                      <Field 
+                        label="Total Premium" 
+                        value={raw?.tot_prem ? money(raw.tot_prem) : "—"} 
+                      />
                       <Field label="Next due" value={shortDate(licNextDue)} />
                     </dl>
                   ) : (

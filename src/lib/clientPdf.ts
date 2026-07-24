@@ -56,8 +56,8 @@ function dueDateForMonth(p: Policy, month: number): string | null {
 /**
  * Renewal date to display in the flat policy listings (per-client report and
  * book-of-business). Non-LIC annual policies are rolled to their next upcoming
- * occurrence so no past year is shown; LIC keeps its stored FUP anchor (its own
- * mode-based cycle is handled elsewhere).
+ * occurrence so no past year is shown; LIC uses its calculated renewal date
+ * (D.o.C + Mode based cycle handled elsewhere).
  */
 function displayRenewal(p: Policy): string | null {
   if (isLicPolicy(p)) return p.renewal_date;

@@ -565,7 +565,6 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                   <th className="px-3 py-3 font-semibold w-24">D.o.C</th>
                   <th className="px-3 py-3 font-semibold w-20">Pln/Tm</th>
                   <th className="px-3 py-3 font-semibold w-24">Mode</th>
-                  <th className="px-3 py-3 font-semibold w-20">FUP</th>
                   <th className="px-3 py-3 font-semibold text-right w-24">Premium</th>
                   <th className="px-3 py-3 font-semibold w-24">Next due</th>
                 </tr>
@@ -594,7 +593,6 @@ export function UploadFlow({ fileType = "pdf" }: { fileType?: "pdf" | "xlsx" }) 
                           </span>
                         ) : "—"}
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-muted">{r.fup || "—"}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-xs">
                         {fmtNum(r.premium)}
                       </td>

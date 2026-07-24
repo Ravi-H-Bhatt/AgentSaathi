@@ -38,8 +38,10 @@ interface ExistingPolicy {
  *
  * Dedup is by POLICY NUMBER only (within the owner + workspace): a policy is
  * stored exactly once no matter how many monthly reports list it. Re-uploading
- * a NEWER report refreshes the FUP / premium / due fields; an older report is
+ * a NEWER report refreshes the premium / due fields; an older report is
  * ignored so data never regresses. Clients are grouped by name.
+ *
+ * Renewal dates are calculated PURELY from D.o.C + Mode, not from FUP.
  */
 export async function POST(request: NextRequest) {
   const agent = await getCurrentAgent();
@@ -152,8 +154,7 @@ export async function POST(request: NextRequest) {
 
     const rawExtract = {
       source: "lic_premium_due",
-      fup: r.fup ?? null,
-      fup_date: r.fup_date ?? r.renewal_date ?? null,
+      fup: r.fup ?? null, // Stored for reference only
       inst_prem: r.inst_prem ?? r.premium ?? null,
       tot_prem: r.tot_prem ?? null,
       due_count: r.due_count ?? null,
