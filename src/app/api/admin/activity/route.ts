@@ -14,8 +14,8 @@ export interface ActivityLogItem {
   detail: string | null;
   workspace: string | null;
   created_at: string;
-  agent?: { email: string; full_name: string | null };
-  owner?: { email: string; full_name: string | null };
+  agent?: { email: string; full_name: string | null; role?: string };
+  owner?: { email: string; full_name: string | null; role?: string };
 }
 
 /**
@@ -46,7 +46,7 @@ export async function GET() {
 
   const { data: agents } = await db
     .from("agents")
-    .select("id, email, full_name")
+    .select("id, email, full_name, role")
     .in("id", Array.from(agentIds));
 
   const agentMap = new Map(agents?.map((a) => [a.id, a]) || []);

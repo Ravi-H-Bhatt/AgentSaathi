@@ -116,8 +116,21 @@ export function ActivityLogTable({ initialLogs }: { initialLogs: ActivityLogItem
                       </td>
                       <td className="px-4 py-3">
                         <div>
-                          <div className="font-medium">
+                          <div className="font-medium flex items-center gap-1.5">
                             {log.agent?.full_name || "Unknown"}
+                            {log.agent?.role && (
+                              <span
+                                className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                                  log.agent.role === "colleague"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : log.agent.role === "admin"
+                                      ? "bg-black text-white"
+                                      : "bg-black/[.06] text-muted"
+                                }`}
+                              >
+                                {log.agent.role}
+                              </span>
+                            )}
                           </div>
                           <div className="text-xs text-muted">
                             {log.agent?.email}

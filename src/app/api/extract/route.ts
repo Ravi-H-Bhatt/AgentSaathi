@@ -70,9 +70,22 @@ export async function POST(request: NextRequest) {
     // Handle Excel files
     if (isExcel) {
       try {
-        const { parseUnitedIndiaExcel } = await import('@/lib/united-india-excel');
-        const rows = parseUnitedIndiaExcel(bytes);
-        
+        // "Transaction Report" style sheets (e.g. M080) map columns by HEADER
+        // name (Ins.Co, Type Of Policy, Name of Client, Total, PolicyNo,
+        // From/To Date). Try this first; fall back to the fixed-column
+        // United India layout.
+        const { parseTransactionReportExcel } = await import(
+          "@/lib/transaction-report-excel"
+        );
+        let rows = parseTransactionReportExcel(bytes);
+        let registerType = "transaction-report-excel";
+
+        if (rows.length === 0) {
+          const { parseUnitedIndiaExcel } = await import("@/lib/united-india-excel");
+          rows = parseUnitedIndiaExcel(bytes);
+          registerType = "united-india-excel";
+        }
+
         if (rows.length > 0) {
           return NextResponse.json({
             filePath: path,
@@ -81,7 +94,7 @@ export async function POST(request: NextRequest) {
             mode: "bulk",
             rowCount: rows.length,
             rows,
-            registerType: 'united-india-excel',
+            registerType,
             confidence: 1.0,
           });
         } else {

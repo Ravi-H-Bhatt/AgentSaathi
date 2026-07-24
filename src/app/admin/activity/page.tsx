@@ -27,7 +27,7 @@ export default async function ActivityLogsPage() {
 
   const { data: agents } = await db
     .from("agents")
-    .select("id, email, full_name")
+    .select("id, email, full_name, role")
     .in("id", Array.from(agentIds));
 
   const agentMap = new Map(agents?.map((a) => [a.id, a]) || []);

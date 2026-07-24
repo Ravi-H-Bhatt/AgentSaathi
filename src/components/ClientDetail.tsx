@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check, Pencil, MessageCircle } from "lucide-react";
-import { money, shortDate, companyLabel } from "@/lib/format";
+import { money, shortDate, companyLabel, getAdjustedRenewalDate } from "@/lib/format";
 import { getLicNextDueISO } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
@@ -266,6 +266,46 @@ export function ClientDetail({
     router.push("/email");
   }
 
+  /**
+   * Build a WhatsApp deep-link that opens the client's chat with a pre-filled
+   * message listing ALL of their policies. Empty fields are omitted.
+   */
+  function buildClientWhatsAppLink(): string | null {
+    if (!mobile) return null;
+    const lines: string[] = [`Dear ${client.full_name},`, ""];
+    lines.push("Here are your policy details with us:");
+
+    client.policies.forEach((p, i) => {
+      const company = companyLabel(p.company, p.product_name);
+      const title = p.product_name || p.policy_type || company || "Policy";
+      const renewal = getAdjustedRenewalDate(p.renewal_date) || p.renewal_date;
+      const block = [
+        "",
+        `*Policy ${i + 1} — ${title}*`,
+        company ? `• Company: ${company}` : "",
+        p.policy_type ? `• Type: ${p.policy_type}` : "",
+        p.policy_number ? `• Policy No: ${p.policy_number}` : "",
+        p.sum_insured != null ? `• Sum Insured: ${money(p.sum_insured)}` : "",
+        p.premium != null
+          ? `• Premium: ${money(p.premium)}${p.mode ? ` (${p.mode})` : ""}`
+          : "",
+        renewal ? `• Renewal Date: ${shortDate(renewal)}` : "",
+      ].filter((l) => l !== "");
+      lines.push(...block);
+    });
+
+    lines.push(
+      "",
+      "Please renew on time to keep your coverage active. Feel free to reach out for any assistance. \u{1F64F}",
+      "",
+      "Regards,",
+      agentName || "Your Insurance Agent"
+    );
+
+    return `https://wa.me/91${mobile}?text=${encodeURIComponent(lines.join("\n"))}`;
+  }
+  const waLink = buildClientWhatsAppLink();
+
   // Reusable "Email" action shown next to the client's phone/contact details.
   // Always available: opens the composer prefilled with the client's email
   // (or blank To when none is on file).
@@ -453,12 +493,13 @@ export function ClientDetail({
                         <span>{phone}</span>
                       )}
                     </span>
-                    {mobile && (
+                    {mobile && waLink && (
                       <a
-                        href={`https://wa.me/91${mobile}`}
+                        href={waLink}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-200 text-green-700 hover:bg-green-50 transition"
+                        title="Open WhatsApp with all policy details pre-filled"
                       >
                         <MessageCircle size={14} /> WhatsApp
                       </a>
