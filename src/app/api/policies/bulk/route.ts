@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentAgent } from "@/lib/auth";
 import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { getWorkspace } from "@/lib/workspace";
+import { normalizePolicyNumber } from "@/lib/policyNumber";
 import type { RegisterRow } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -16,6 +17,15 @@ interface BulkBody {
 /** Normalize a name for grouping/dedup (case + whitespace insensitive). */
 function nameKey(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Canonical policy-number key (shared normaliser): lowercased, trailing all-zero
+ * blocks dropped ("6500293839 00 00" == "6500293839"), all non-alphanumerics
+ * removed. Two policies with the same number (in any style) are the SAME policy.
+ */
+function normPolicy(pn: string | null | undefined): string {
+  return normalizePolicyNumber(pn);
 }
 
 function cleanName(name: string | null): string | null {
@@ -102,27 +112,6 @@ export async function POST(request: NextRequest) {
   const dateKey = (d: string | null | undefined): string =>
     d ? String(d).slice(0, 10) : "";
 
-  const rowKey = (
-    clientName: string,
-    policyNumber: string | null,
-    productName: string | null,
-    policyType: string | null,
-    premium: number | string | null,
-    sumInsured: number | string | null,
-    startDate: string | null,
-    renewalDate: string | null
-  ): string =>
-    [
-      (policyNumber || "").trim().toLowerCase(),
-      nameKey(clientName),
-      (productName || "").trim().toLowerCase(),
-      (policyType || "").trim().toLowerCase(),
-      numKey(premium),
-      numKey(sumInsured),
-      dateKey(startDate),
-      dateKey(renewalDate),
-    ].join("|");
-
   // "All other details" key — EXCLUDES the policy number. Used so a row whose
   // policy number differs (or is blank) but whose every other field matches an
   // existing policy is still treated as a duplicate and skipped.
@@ -151,7 +140,10 @@ export async function POST(request: NextRequest) {
   // Also map every stored policy_number → its client_id, so an uploaded renewal
   // can be attached to the client who already holds the current OR previous
   // policy number (renewal mapping).
-  const existingKeys = new Set<string>();
+  // Canonical (alphanumeric-only) policy numbers already stored. If an incoming
+  // row's normalized policy number is here, it is the SAME policy → skip it,
+  // regardless of any other field differing.
+  const existingPolicyNums = new Set<string>();
   // Keys of every existing policy WITHOUT its policy number, so a differing /
   // blank policy number with otherwise-identical details is caught as a dup.
   const existingDetailKeys = new Set<string>();
@@ -178,28 +170,16 @@ export async function POST(request: NextRequest) {
       if (batch.length === 0) break;
       for (const p of batch) {
         const cname = clientNameById.get(p.client_id) || "";
-        if (p.policy_number && p.client_id) {
-          clientIdByPolicyNumber.set(String(p.policy_number).trim(), p.client_id);
-        }
-        if (p.policy_number) {
-          policyByNumber.set(String(p.policy_number).trim(), {
+        const np = normPolicy(p.policy_number);
+        if (np) {
+          existingPolicyNums.add(np);
+          if (p.client_id) clientIdByPolicyNumber.set(np, p.client_id);
+          policyByNumber.set(np, {
             id: p.id,
             source_file_path: p.source_file_path ?? null,
             client_id: p.client_id,
           });
         }
-        existingKeys.add(
-          rowKey(
-            cname,
-            p.policy_number,
-            p.product_name,
-            p.policy_type,
-            p.premium,
-            p.sum_insured,
-            p.start_date,
-            p.renewal_date
-          )
-        );
         existingDetailKeys.add(
           detailKey(
             cname,
@@ -224,8 +204,8 @@ export async function POST(request: NextRequest) {
   // person even when the name is written differently.
   const forcedClientForRow = new Map<RegisterRow, string>();
   for (const r of valid) {
-    const prev = r.previous_policy_number?.toString().trim();
-    const cur = r.policy_number?.toString().trim();
+    const prev = normPolicy(r.previous_policy_number);
+    const cur = normPolicy(r.policy_number);
     const cid =
       (prev && clientIdByPolicyNumber.get(prev)) ||
       (cur && clientIdByPolicyNumber.get(cur)) ||
@@ -241,32 +221,36 @@ export async function POST(request: NextRequest) {
   //         composite key already exists in the DB is skipped. ----
   // Track keys accepted in THIS batch so two identical rows in the same upload
   // can't both insert (bulletproof in-file dedup, on top of the DB check).
-  const batchSeen = new Set<string>();
+  const batchPolicyNums = new Set<string>();
   const batchDetailSeen = new Set<string>();
   const toImport = valid.filter((r) => {
     // A schedule/renewal row (carries a previous policy number) whose CURRENT
     // OR PREVIOUS policy number already exists → DO NOT create a new detail.
     // We attach the uploaded PDF to that matched existing policy instead (below).
     if (r.previous_policy_number) {
-      const cur = r.policy_number?.toString().trim();
-      const prev = r.previous_policy_number.toString().trim();
+      const cur = normPolicy(r.policy_number);
+      const prev = normPolicy(r.previous_policy_number);
       if ((cur && policyByNumber.has(cur)) || (prev && policyByNumber.has(prev))) {
         console.log('[bulk] Schedule matched existing policy — attaching, not creating:', cur || prev);
         return false;
       }
     }
-    const key = rowKey(
-      r.client_name!,
-      r.policy_number,
-      r.product_name,
-      r.policy_type,
-      r.premium,
-      r.sum_insured,
-      r.start_date,
-      r.renewal_date
-    );
-    // Key ignoring the policy number: catches a row whose policy number differs
-    // (or is blank) but whose every other detail matches an existing/earlier row.
+
+    // RULE 1 — policy number match = duplicate. If this row has a policy number
+    // (in any style) and that canonical number is already stored, or was already
+    // accepted earlier in this same upload, it is the SAME policy → skip, no
+    // matter what any other field says.
+    const np = normPolicy(r.policy_number);
+    if (np) {
+      if (existingPolicyNums.has(np) || batchPolicyNums.has(np)) {
+        console.log('[bulk] Skipping — policy number already exists:', r.policy_number);
+        return false;
+      }
+    }
+
+    // RULE 2 — blank OR new policy number, but every other detail matches an
+    // existing/earlier row → still a duplicate. Catches rows with no policy
+    // number and re-typed rows whose number changed but details are identical.
     const dkey = detailKey(
       r.client_name!,
       r.company ?? null,
@@ -277,22 +261,16 @@ export async function POST(request: NextRequest) {
       r.start_date,
       r.renewal_date
     );
-    // Duplicate if — already in the DB (full key OR all-other-details key), or
-    // already accepted earlier in this same upload (either key).
-    if (
-      existingKeys.has(key) ||
-      existingDetailKeys.has(dkey) ||
-      batchSeen.has(key) ||
-      batchDetailSeen.has(dkey)
-    ) {
-      console.log('[bulk] Skipping duplicate:', {
+    if (existingDetailKeys.has(dkey) || batchDetailSeen.has(dkey)) {
+      console.log('[bulk] Skipping — all other details already exist:', {
         name: r.client_name,
-        policy: r.policy_number,
         premium: r.premium,
       });
       return false;
     }
-    batchSeen.add(key);
+
+    // Accept — record its keys so later rows in this batch dedup against it.
+    if (np) batchPolicyNums.add(np);
     batchDetailSeen.add(dkey);
     return true;
   });
@@ -313,15 +291,19 @@ export async function POST(request: NextRequest) {
   let matchedPolicyNumber: string | null = null;
   for (const r of valid) {
     if (!r.previous_policy_number) continue;
-    const cur = r.policy_number?.toString().trim() || "";
-    const prev = r.previous_policy_number?.toString().trim() || "";
+    const cur = normPolicy(r.policy_number);
+    const prev = normPolicy(r.previous_policy_number);
     const curMatch = cur ? policyByNumber.get(cur) : undefined;
     const prevMatch = prev ? policyByNumber.get(prev) : undefined;
     const target = curMatch || prevMatch;
     if (target) {
       matched = true;
       matchedClientName = clientNameById.get(target.client_id) || matchedClientName;
-      matchedPolicyNumber = matchedPolicyNumber || cur || prev || null;
+      matchedPolicyNumber =
+        matchedPolicyNumber ||
+        r.policy_number?.toString().trim() ||
+        r.previous_policy_number?.toString().trim() ||
+        null;
     }
     // Attach the uploaded PDF to the matched existing policy (current match wins,
     // else the previous/renewed one) so its "View" opens this full document.

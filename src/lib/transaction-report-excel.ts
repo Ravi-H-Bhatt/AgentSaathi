@@ -16,6 +16,7 @@
  */
 import * as XLSX from "xlsx";
 import type { RegisterRow } from "./types";
+import { normalizePolicyNumber } from "./policyNumber";
 
 function toISODate(val: unknown): string | null {
   if (val == null || val === "") return null;
@@ -54,6 +55,17 @@ function clean(val: unknown): string {
   if (val == null) return "";
   // Strip a leading apostrophe that Excel adds to force-text cells.
   return String(val).replace(/^'/, "").trim();
+}
+
+/**
+ * Canonical policy-number key (shared with the bulk-import de-dup so the SAME
+ * rule is applied everywhere): lowercased, trailing all-zero blocks dropped
+ * (Tata AIG "6500293839 00 00" == book "6500293839"), every remaining
+ * non-alphanumeric removed. Same policy written in different styles collapses
+ * to ONE key.
+ */
+function normPolicy(val: unknown): string {
+  return normalizePolicyNumber(clean(val));
 }
 
 const ALIASES: Record<string, string[]> = {
@@ -157,7 +169,9 @@ export function parseTransactionReportExcel(buffer: Buffer): RegisterRow[] {
       startDate || "",
       renewalDate || "",
     ].join("|");
-    const pnK = policyNumber ? policyNumber.toLowerCase() : null;
+    // Match policy numbers by their canonical (alphanumeric-only) form so the
+    // same number written differently collapses to one entry.
+    const pnK = normPolicy(policyNumber) || null;
     if ((pnK && seenPolicy.has(pnK)) || seenDetail.has(detailK)) continue;
     if (pnK) seenPolicy.add(pnK);
     seenDetail.add(detailK);
