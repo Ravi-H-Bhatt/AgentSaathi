@@ -134,11 +134,32 @@ export function parseTransactionReportExcel(buffer: Buffer): RegisterRow[] {
     const clientName = clean(get(row, "client_name"));
     if (!clientName) continue; // no client → skip (blank/summary rows)
 
-    const policyNumber = clean(get(row, "policy_number")) || null;
+    // Normalise the policy number (trim + collapse internal whitespace) so
+    // "6500293839 00 00" and "6500293839  00 00" are treated as the same.
+    const policyNumber =
+      clean(get(row, "policy_number")).replace(/\s+/g, " ") || null;
     const company = clean(get(row, "company")) || null;
+    const policyType = clean(get(row, "policy_type")) || null;
+    const startDate = toISODate(get(row, "start_date"));
+    const renewalDate = toISODate(get(row, "renewal_date"));
+    const premium = toNumber(get(row, "premium"));
 
-    // Only unique entries: dedupe by policy number (or name+policy when blank).
-    const key = (policyNumber || `${clientName}|noPolicy|${i}`).toLowerCase();
+    // Bulletproof in-file dedupe:
+    //  • If a policy number exists, it is the identity — one policy number is
+    //    stored ONCE (rows repeating it, even with different premium/dates,
+    //    collapse to the first occurrence).
+    //  • If the policy number is blank, fall back to a full composite of every
+    //    identifying field so only truly-identical rows collapse.
+    const key = policyNumber
+      ? `pn:${policyNumber.toLowerCase()}`
+      : `cx:${[
+          clientName.toLowerCase(),
+          (company || "").toLowerCase(),
+          (policyType || "").toLowerCase(),
+          premium == null ? "" : String(premium),
+          startDate || "",
+          renewalDate || "",
+        ].join("|")}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -148,14 +169,14 @@ export function parseTransactionReportExcel(buffer: Buffer): RegisterRow[] {
       client_phone: null,
       client_address: null,
       policy_number: policyNumber,
-      policy_type: clean(get(row, "policy_type")) || null,
+      policy_type: policyType,
       policy_holder_type: null,
       product_name: null,
       company,
       mode: null,
-      start_date: toISODate(get(row, "start_date")),
-      renewal_date: toISODate(get(row, "renewal_date")),
-      premium: toNumber(get(row, "premium")),
+      start_date: startDate,
+      renewal_date: renewalDate,
+      premium,
       sum_insured: null,
       previous_policy_number: null,
     });

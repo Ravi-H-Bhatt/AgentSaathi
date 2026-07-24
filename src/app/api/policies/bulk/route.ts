@@ -63,15 +63,26 @@ export async function POST(request: NextRequest) {
   const clientIdByKey = new Map<string, string>();
   const clientNameById = new Map<string, string>();
   {
-    const { data: existingClients } = await db
-      .from("clients")
-      .select("id, full_name")
-      .eq("agent_id", ownerId)
-      .eq("workspace", workspace);
-    for (const c of (existingClients as { id: string; full_name: string }[]) || []) {
-      const key = nameKey(c.full_name);
-      if (!clientIdByKey.has(key)) clientIdByKey.set(key, c.id);
-      clientNameById.set(c.id, c.full_name);
+    // Paginate past the 1000-row default cap — otherwise clients beyond row
+    // 1000 are missing here, their policies get an empty name in the dedup key,
+    // and re-uploads no longer match → mass duplication.
+    let from = 0;
+    const pageSize = 1000;
+    for (;;) {
+      const { data } = await db
+        .from("clients")
+        .select("id, full_name")
+        .eq("agent_id", ownerId)
+        .eq("workspace", workspace)
+        .range(from, from + pageSize - 1);
+      const batch = (data as { id: string; full_name: string }[]) || [];
+      for (const c of batch) {
+        const key = nameKey(c.full_name);
+        if (!clientIdByKey.has(key)) clientIdByKey.set(key, c.id);
+        clientNameById.set(c.id, c.full_name);
+      }
+      if (batch.length < pageSize) break;
+      from += pageSize;
     }
   }
 
@@ -189,6 +200,9 @@ export async function POST(request: NextRequest) {
   //         separate transactions (different Tra IDs), so all such rows are
   //         imported. Re-uploading still won't double, because any row whose
   //         composite key already exists in the DB is skipped. ----
+  // Track keys accepted in THIS batch so two identical rows in the same upload
+  // can't both insert (bulletproof in-file dedup, on top of the DB check).
+  const batchSeen = new Set<string>();
   const toImport = valid.filter((r) => {
     // A schedule/renewal row (carries a previous policy number) whose CURRENT
     // OR PREVIOUS policy number already exists → DO NOT create a new detail.
@@ -211,16 +225,19 @@ export async function POST(request: NextRequest) {
       r.start_date,
       r.renewal_date
     );
-    const isDuplicate = existingKeys.has(key);
-    if (isDuplicate) {
+    // Duplicate if it's already in the DB, OR already accepted earlier in this
+    // same upload.
+    if (existingKeys.has(key) || batchSeen.has(key)) {
       console.log('[bulk] Skipping duplicate:', {
         name: r.client_name,
         policy: r.policy_number,
         premium: r.premium,
-        key: key.substring(0, 100)
+        key: key.substring(0, 100),
       });
+      return false;
     }
-    return !isDuplicate;
+    batchSeen.add(key);
+    return true;
   });
   const duplicates = valid.length - toImport.length;
   
