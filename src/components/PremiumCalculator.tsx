@@ -28,7 +28,7 @@ const SUM_INSURED_OPTIONS = [
 
 // Top-Up Mediclaim: Threshold-to-Sum Insured Mapping Matrix
 // OFFICIAL RULES: Each Sum Insured has specific allowed Threshold values
-const TOPUP_MATRIX = {
+const TOPUP_MATRIX: Record<number, number[]> = {
   500000: [500000],           // Sum Insured 5L -> Threshold ONLY 5L
   1000000: [1000000],         // Sum Insured 10L -> Threshold ONLY 10L
   1500000: [1500000],         // Sum Insured 15L -> Threshold ONLY 15L
@@ -36,17 +36,12 @@ const TOPUP_MATRIX = {
   1200000: [800000],          // Sum Insured 12L -> Threshold ONLY 8L
   1700000: [800000],          // Sum Insured 17L -> Threshold ONLY 8L
   2200000: [800000],          // Sum Insured 22L -> Threshold ONLY 8L
-} as const;
+};
 
 // Sum Insured values that are valid for Top-Up
 const TOPUP_SUM_INSURED_OPTIONS = Object.keys(TOPUP_MATRIX)
   .map(Number)
   .sort((a, b) => a - b);
-
-// All possible thresholds (derived from matrix)
-const ALL_THRESHOLD_OPTIONS = Array.from(
-  new Set(Object.values(TOPUP_MATRIX).flat())
-).sort((a, b) => a - b);
 
 export default function PremiumCalculator() {
   const [policyType, setPolicyType] = useState<PolicyType>("individual");
@@ -150,8 +145,9 @@ export default function PremiumCalculator() {
 
       const data: PremiumBreakdown = await response.json();
       setBreakdown(data);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -268,7 +264,7 @@ export default function PremiumCalculator() {
                 Family Members <span className="text-red-500">(Minimum 2 Required)</span>
               </label>
               <p className="text-xs text-gray-500 mb-3">
-                Floater Mediclaim covers the entire family under one sum insured. Add each member's age.
+                Floater Mediclaim covers the entire family under one sum insured. Add each member&apos;s age.
               </p>
               {floaterMembers.map((member, index) => (
                 <div key={index} className="flex gap-2 mb-2 items-center">
@@ -416,7 +412,7 @@ export default function PremiumCalculator() {
                 Eldest (Primary): <strong>{Math.max(...topupMembers.map(m => m.age))} years</strong>
               </p>
               <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                <strong>Primary Member Rate Applied:</strong> The eldest member receives the "Primary" rate. All others receive "Additional" rates.
+                <strong>Primary Member Rate Applied:</strong> The eldest member receives the &quot;Primary&quot; rate. All others receive &quot;Additional&quot; rates.
               </div>
             </div>
           </>
