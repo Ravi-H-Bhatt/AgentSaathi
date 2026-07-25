@@ -258,6 +258,50 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Check if this is a United India Insurance policy (single policy)
+  const lowerText = text.toLowerCase();
+  const isUnitedIndia = lowerText.includes("united india insurance") ||
+                         lowerText.includes("uiic.co.in") ||
+                         (lowerText.includes("irdai reg") && lowerText.includes("545"));
+  
+  if (isUnitedIndia) {
+    try {
+      console.log('[extract] Detected United India Insurance policy');
+      const { extractUnitedIndia } = await import('@/lib/unitedindia');
+      const base64Pdf = bytes.toString('base64');
+      const extracted = await extractUnitedIndia(base64Pdf);
+      
+      return NextResponse.json({
+        filePath: path,
+        fileName: file.name,
+        scanned: false,
+        mode: "single",
+        category: "GENERAL",
+        extracted: {
+          client_name: extracted.client_name,
+          client_email: null,
+          client_phone: null,
+          date_of_birth: null,
+          age: null,
+          company: extracted.company,
+          policy_type: extracted.policy_type,
+          product_name: extracted.product_name,
+          policy_number: extracted.policy_number,
+          sum_insured: extracted.sum_insured,
+          premium: extracted.premium,
+          start_date: extracted.start_date,
+          renewal_date: extracted.renewal_date,
+          client_address: extracted.client_address,
+          policy_holder_type: extracted.policy_holder_type,
+          low_confidence_fields: [],
+        },
+      });
+    } catch (err) {
+      console.error('[extract] United India extraction failed:', err);
+      // Fall through to generic extraction
+    }
+  }
+
   try {
     const extracted = await extractPolicyFromText(text, category);
     return NextResponse.json({

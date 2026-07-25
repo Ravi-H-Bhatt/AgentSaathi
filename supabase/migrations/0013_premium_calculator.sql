@@ -165,6 +165,37 @@ GRANT SELECT ON nia_optional_cover_iii TO authenticated;
 GRANT SELECT ON nia_topup_mediclaim TO authenticated;
 GRANT SELECT ON premium_config TO authenticated;
 
+-- Enable RLS for all premium tables
+ALTER TABLE nia_mediclaim_individual ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nia_mediclaim_floater ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nia_optional_cover_i ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nia_optional_cover_ii ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nia_optional_cover_iii ENABLE ROW LEVEL SECURITY;
+ALTER TABLE nia_topup_mediclaim ENABLE ROW LEVEL SECURITY;
+ALTER TABLE premium_config ENABLE ROW LEVEL SECURITY;
+
+-- Create policies to allow ALL authenticated users to read premium data
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_mediclaim_individual FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_mediclaim_floater FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_optional_cover_i FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_optional_cover_ii FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_optional_cover_iii FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON nia_topup_mediclaim FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY "Allow authenticated users to read premium data" 
+  ON premium_config FOR SELECT TO authenticated USING (true);
+
 COMMENT ON TABLE nia_mediclaim_individual IS 'Premium rates for New India Individual Mediclaim Policy';
 COMMENT ON TABLE nia_mediclaim_floater IS 'Premium rates for New India Floater Mediclaim Policy';
 COMMENT ON TABLE nia_optional_cover_i IS 'Premium for Optional Cover I - No Proportionate Deduction';

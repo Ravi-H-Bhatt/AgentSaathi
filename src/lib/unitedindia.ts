@@ -1,94 +1,126 @@
-import type { RegisterRow } from "@/lib/types";
-
 /**
- * PARSER: United India Insurance "Premium Register"
- *
- * Clean, linear text layer. Each policy row (flattened) looks like:
- *   1 060000 9060500 0605002825P115623759 0 07/01/2026 PRAVIN K.TRIVEDI
- *   31 Jan 2026 30 Jan 2027 Health 300000.00 0.00 24604 RO AHMEDABAD ...
- *
- * Columns (row 1): S.NO, RO Code, Office Code, Policy Number, Endorsement,
- *   Collection Date, Insured Name, Policy Effective Date, Policy Expiry Date,
- *   Department, Sum Insured, TP Premium, OD (own-damage premium).
- *
- * We anchor on the distinctive policy number (10 digits + "P" + 9 digits),
- * which makes extraction robust across page breaks.
- *
- * Premium is intentionally NOT captured for this report (it is split across
- * TP Premium + OD columns and not requested), so premium is left null.
+ * United India Insurance Company Limited parser
+ * Extracts policy details from United India health insurance policy PDFs
  */
 
-const MONTHS: Record<string, string> = {
-  jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-  jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-};
+import Anthropic from "@anthropic-ai/sdk";
 
-/** "31 Jan 2026" / "1 Feb 2026" -> "2026-01-31" */
-function isoFromDMonY(s: string | undefined): string | null {
-  if (!s) return null;
-  const m = s.match(/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/);
-  if (!m) return null;
-  const mm = MONTHS[m[2].toLowerCase()];
-  if (!mm) return null;
-  return `${m[3]}-${mm}-${m[1].padStart(2, "0")}`;
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+});
+
+export interface UnitedIndiaExtraction {
+  client_name: string;
+  policy_number: string;
+  company: string;
+  product_name: string;
+  policy_type: string;
+  sum_insured: number;
+  premium: number;
+  start_date: string;
+  renewal_date: string;
+  client_address: string | null;
+  policy_holder_type: string | null;
 }
 
-/** "300000.00" / "15,000.00" -> 300000 ; blank -> null */
-function money(s: string | undefined): number | null {
-  if (s == null) return null;
-  const c = s.replace(/,/g, "").trim();
-  if (!c) return null;
-  const v = parseFloat(c);
-  return isNaN(v) ? null : Math.round(v);
-}
+export async function extractUnitedIndia(
+  pdfBase64: string
+): Promise<UnitedIndiaExtraction> {
+  const response = await anthropic.messages.create({
+    model: "claude-3-5-sonnet-20241022",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: pdfBase64,
+            },
+          },
+          {
+            type: "text",
+            text: `Extract the following details from this United India Insurance policy PDF.
 
-/** Detect a United India Insurance Premium Register. */
-export function looksLikeUnitedIndiaRegister(text: string): boolean {
-  const head = text.slice(0, 4000);
-  return (
-    /united\s+india\s+insurance/i.test(head) &&
-    /premium\s+register/i.test(head)
-  );
-}
+CRITICAL EXTRACTION RULES:
+1. Client Name: Extract the policyholder name (e.g., "MR.JIGNESH RAJENDRAKUMAR SHAH")
+2. Policy Number: Extract the policy number (e.g., "0605002825P116693180")
+3. Company: Always set to "United India Insurance"
+4. Product Name: Extract the plan name (e.g., "Individual Health Insurance - Platinum")
+5. Policy Type: Extract the policy type (e.g., "Health Insurance", "Mediclaim")
+6. Sum Insured: Extract TOTAL sum insured for all members (add all individual SI)
+7. Premium: Extract the TOTAL annual premium amount from "Total" or "Premium" field
+8. Start Date: Extract "Period of Insurance" FROM date in DD/MM/YYYY format
+9. Renewal Date: Extract "Period of Insurance" TO date in DD/MM/YYYY format
+10. Client Address: Extract complete address
+11. Policy Holder Type: Determine from number of insured persons (Individual/Family/Floater)
 
-/** Parse the United India Premium Register into rows. */
-export function parseUnitedIndiaRegister(text: string): RegisterRow[] {
-  const t = text.replace(/\s+/g, " ");
-  const rows: RegisterRow[] = [];
+IMPORTANT FOR SUM INSURED:
+- If multiple members with different SI (e.g., 200000, 200000, 150000, 150000)
+- Add them ALL together for total sum_insured (e.g., 700000)
+- This represents the TOTAL coverage across all family members
 
-  //  policyNo  endorsement  collectionDate  insuredName  effDate  expDate
-  //    department  sumInsured  tpPremium  odPremium
-  // Note: some names end with a period and are glued to the effective date with
-  // no space (e.g. "...SHAH5 Feb 2026"), so we allow zero spaces (\s*) between
-  // the insured name and the first date.
-  const re =
-    /(\d{10}P\d{9})\s+\d+\s+\d{2}\/\d{2}\/\d{4}\s+(.+?)\s*(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})\s+([A-Za-z][A-Za-z ]*?)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+(\d+)/g;
+IMPORTANT FOR PREMIUM:
+- Look for "Total" or "Total Annual Premium" or final premium amount
+- This should include all member premiums, discounts, and charges
+- Extract only the numeric value
 
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(t)) !== null) {
-    const policy = m[1];
-    const name = m[2].replace(/\s+/g, " ").trim();
-    const eff = m[3];
-    const exp = m[4];
-    const dept = m[5].replace(/\s+/g, " ").trim();
-    const si = money(m[6]);
+Return ONLY valid JSON with this exact structure:
+{
+  "client_name": "string",
+  "policy_number": "string",
+  "company": "United India Insurance",
+  "product_name": "string",
+  "policy_type": "string",
+  "sum_insured": number,
+  "premium": number,
+  "start_date": "DD/MM/YYYY",
+  "renewal_date": "DD/MM/YYYY",
+  "client_address": "string or null",
+  "policy_holder_type": "Individual or Family or Floater or null"
+}`,
+          },
+        ],
+      },
+    ],
+  });
 
-    rows.push({
-      sn: null,
-      client_name: name || null,
-      client_phone: null,
-      client_address: null,
-      company: "United India",
-      policy_number: policy,
-      policy_type: dept || null,
-      product_name: null,
-      mode: null,
-      start_date: isoFromDMonY(eff),
-      renewal_date: isoFromDMonY(exp),
-      premium: null, // premium intentionally not captured for this report
-      sum_insured: si ?? 0,
-    });
+  const textContent = response.content.find((c) => c.type === "text");
+  if (!textContent || textContent.type !== "text") {
+    throw new Error("No text response from Claude");
   }
 
-  return rows;
+  // Extract JSON from response
+  let jsonText = textContent.text.trim();
+  
+  // Remove markdown code blocks if present
+  jsonText = jsonText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
+  
+  // Parse and validate
+  const data = JSON.parse(jsonText) as UnitedIndiaExtraction;
+
+  // Validate required fields
+  if (!data.client_name || !data.policy_number || !data.company) {
+    throw new Error("Missing required fields in extraction");
+  }
+
+  // Ensure company is set correctly
+  data.company = "United India Insurance";
+
+  return data;
+}
+
+/**
+ * Quick validation check for United India policies
+ */
+export function isUnitedIndiaPolicy(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  return (
+    lowerText.includes("united india insurance") ||
+    lowerText.includes("uiic.co.in") ||
+    lowerText.includes("irdai reg") && lowerText.includes("545")
+  );
 }
