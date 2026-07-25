@@ -49,46 +49,81 @@ export async function extractUnitedIndia(
           },
           {
             type: "text",
-            text: `Extract the following details from this United India Insurance policy PDF.
+            text: `You are extracting data from a United India Insurance policy document. Read the document carefully and extract the following fields EXACTLY as they appear.
 
-CRITICAL EXTRACTION RULES:
-1. Client Name: Extract the policyholder name (e.g., "MR.JIGNESH RAJENDRAKUMAR SHAH")
-2. Policy Number: Extract the CURRENT policy number (e.g., "0605002825P116693180")
-3. Previous Policy Number: Extract the "Previous Policy No." if present (e.g., "0605002824P117164550")
-4. Company: Always set to "United India Insurance"
-5. Product Name: Extract the plan name (e.g., "Individual Health Insurance - Platinum")
-6. Policy Type: Extract the policy type (e.g., "Health Insurance", "Mediclaim")
-7. Sum Insured: Extract TOTAL sum insured for all members (add all individual SI)
-8. Premium: Extract the TOTAL annual premium amount from "Total" or "Premium" field
-9. Start Date: Extract "Period of Insurance" FROM date in DD/MM/YYYY format
-10. Renewal Date: Extract "Period of Insurance" TO date in DD/MM/YYYY format
-11. Client Address: Extract complete address
-12. Policy Holder Type: Determine from number of insured persons (Individual/Family/Floater)
+EXTRACTION INSTRUCTIONS (Follow precisely):
 
-IMPORTANT FOR SUM INSURED:
-- If multiple members with different SI (e.g., 200000, 200000, 150000, 150000)
-- Add them ALL together for total sum_insured (e.g., 700000)
-- This represents the TOTAL coverage across all family members
+1. **client_name**: Look for "Policyholder Name" in "POLICY DETAILS" section
+   - Example: "MR MR.JIGNESH RAJENDRAKUMAR SHAH."
+   - Clean up: Remove "MR MR." prefix, keep just "JIGNESH RAJENDRAKUMAR SHAH"
+   
+2. **policy_number**: Look for "Policy No." under "POLICY DETAILS"
+   - Example: "0605002825P116693180"
+   - This is the CURRENT policy number
 
-IMPORTANT FOR PREMIUM:
-- Look for "Total" or "Total Annual Premium" or final premium amount
-- This should include all member premiums, discounts, and charges
-- Extract only the numeric value
+3. **previous_policy_number**: Look for "Previous Policy No." under "POLICY DETAILS"
+   - Example: "0605002824P117164550"
+   - If not found, set to null
 
-Return ONLY valid JSON with this exact structure:
+4. **company**: Always set to "United India Insurance"
+
+5. **product_name**: Look for plan name in "SUMMARY OF COVERAGE" section
+   - Example: "Individual Health Insurance - Platinum"
+   - Or look at document header: "INDIVIDUAL HEALTH INSURANCE POLICY"
+
+6. **policy_type**: Determine from document title
+   - Example: "Health Insurance" or "Mediclaim"
+
+7. **sum_insured**: Look in "SUMMARY OF COVERAGE" section
+   - Find "Sum Insured" column for ALL insured persons
+   - ADD all individual sum insured values together
+   - Example: If 4 members have 200000, 200000, 150000, 150000 → Total = 700000
+
+8. **premium**: Look in "PAYMENT DETAILS" section
+   - Find the FINAL "Total" amount (after all discounts and charges)
+   - Example: Look for line showing "Total" followed by amount like "19,346.00"
+   - Return as number without commas: 19346
+
+9. **start_date**: Look for "Period of Insurance" in "POLICY DETAILS"
+   - Extract the FROM date
+   - Example: "From 00:00 hrs of 01/02/2026" → "01/02/2026"
+   - Format: DD/MM/YYYY
+
+10. **renewal_date**: Look for "Period of Insurance" in "POLICY DETAILS"
+    - Extract the TO date
+    - Example: "To Midnight on 31/01/2027" → "31/01/2027"
+    - Format: DD/MM/YYYY
+
+11. **client_address**: Look for "Address" under "YOUR CONTACT INFORMATION"
+    - Extract complete address including city, state, PIN
+    - Example: "7, MIRAL APPARTMENTS, NEAR JAIN UPASHRAY, BHAGWAN NAGAR TEKRO, PALDI, AHMADABAD GUJARAT-380007"
+
+12. **policy_holder_type**: Determine from number of insured persons in "DETAILS OF INSURED PERSONS"
+    - If 1 person: "Individual"
+    - If 2+ persons: "Family"
+    - If explicitly mentions "Floater": "Floater"
+
+CRITICAL RULES:
+- Return ONLY valid JSON
+- All numeric values must be numbers (not strings)
+- All dates must be in DD/MM/YYYY format
+- If a field is not found, use null (not empty string)
+- Clean up client_name: remove duplicate titles like "MR MR.", "MRS MRS."
+
+Return this EXACT JSON structure:
 {
-  "client_name": "string",
-  "policy_number": "string",
-  "previous_policy_number": "string or null",
+  "client_name": "JIGNESH RAJENDRAKUMAR SHAH",
+  "policy_number": "0605002825P116693180",
+  "previous_policy_number": "0605002824P117164550",
   "company": "United India Insurance",
-  "product_name": "string",
-  "policy_type": "string",
-  "sum_insured": number,
-  "premium": number,
-  "start_date": "DD/MM/YYYY",
-  "renewal_date": "DD/MM/YYYY",
-  "client_address": "string or null",
-  "policy_holder_type": "Individual or Family or Floater or null"
+  "product_name": "Individual Health Insurance - Platinum",
+  "policy_type": "Health Insurance",
+  "sum_insured": 700000,
+  "premium": 19346,
+  "start_date": "01/02/2026",
+  "renewal_date": "31/01/2027",
+  "client_address": "7, MIRAL APPARTMENTS, NEAR JAIN UPASHRAY, BHAGWAN NAGAR TEKRO, PALDI, AHMADABAD GUJARAT-380007",
+  "policy_holder_type": "Family"
 }`,
           },
         ],
@@ -102,17 +137,43 @@ Return ONLY valid JSON with this exact structure:
   }
 
   // Parse JSON response
-  const data = JSON.parse(content) as UnitedIndiaExtraction;
-
-  // Validate required fields
-  if (!data.client_name || !data.policy_number || !data.company) {
-    throw new Error("Missing required fields in extraction");
+  let data: any;
+  try {
+    data = JSON.parse(content);
+  } catch (err) {
+    console.error('[United India] Failed to parse JSON response:', content);
+    throw new Error("Invalid JSON response from AI");
   }
 
-  // Ensure company is set correctly
+  // Clean up client_name - remove duplicate titles
+  if (data.client_name) {
+    data.client_name = data.client_name
+      .replace(/^(MR|MRS|MS|DR)\.?\s+(MR|MRS|MS|DR)\.?\s+/i, '')
+      .replace(/^(MR|MRS|MS|DR)\.?\s+/i, '')
+      .trim();
+  }
+
+  // Ensure company is always correct
   data.company = "United India Insurance";
 
-  return data;
+  // Validate required fields
+  if (!data.client_name || !data.policy_number) {
+    throw new Error("Missing required fields: client_name and policy_number are mandatory");
+  }
+
+  // Ensure sum_insured and premium are numbers
+  if (data.sum_insured) {
+    data.sum_insured = typeof data.sum_insured === 'string' 
+      ? parseFloat(data.sum_insured.replace(/,/g, ''))
+      : data.sum_insured;
+  }
+  if (data.premium) {
+    data.premium = typeof data.premium === 'string'
+      ? parseFloat(data.premium.replace(/,/g, ''))
+      : data.premium;
+  }
+
+  return data as UnitedIndiaExtraction;
 }
 
 /**

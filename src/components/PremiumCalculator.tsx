@@ -62,10 +62,11 @@ export default function PremiumCalculator() {
     { age: 32 }
   ]);
 
-  // Top-Up fields
+  // Top-Up fields - simple list of member ages
   const [threshold, setThreshold] = useState(500000);
-  const [primaryMemberAge, setPrimaryMemberAge] = useState(30);
-  const [additionalMembers, setAdditionalMembers] = useState<Array<{ age: number }>>([]);
+  const [topupMembers, setTopupMembers] = useState<Array<{ age: number }>>([
+    { age: 35 } // Start with 1 member
+  ]);
 
   const handleCalculate = async () => {
     setLoading(true);
@@ -118,8 +119,7 @@ export default function PremiumCalculator() {
           policyType: "topup",
           threshold,
           sumInsured,
-          primaryMemberAge,
-          additionalMembers: additionalMembers.length > 0 ? additionalMembers : undefined,
+          memberAges: topupMembers.map(m => m.age),
         };
       }
 
@@ -165,18 +165,23 @@ export default function PremiumCalculator() {
   };
 
   // Top-up member management
-  const addAdditionalMember = () => {
-    setAdditionalMembers([...additionalMembers, { age: 25 }]);
+  const addTopupMember = () => {
+    setTopupMembers([...topupMembers, { age: 25 }]);
   };
 
-  const removeAdditionalMember = (index: number) => {
-    setAdditionalMembers(additionalMembers.filter((_, i) => i !== index));
+  const removeTopupMember = (index: number) => {
+    if (topupMembers.length <= 1) {
+      setError("Top-Up Mediclaim requires at least 1 member");
+      return;
+    }
+    setTopupMembers(topupMembers.filter((_, i) => i !== index));
+    setError(null);
   };
 
-  const updateAdditionalMemberAge = (index: number, age: number) => {
-    const updated = [...additionalMembers];
+  const updateTopupMemberAge = (index: number, age: number) => {
+    const updated = [...topupMembers];
     updated[index] = { age };
-    setAdditionalMembers(updated);
+    setTopupMembers(updated);
   };
 
   return (
@@ -307,37 +312,34 @@ export default function PremiumCalculator() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Primary Member Age</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-md p-2"
-                  value={primaryMemberAge}
-                  onChange={(e) => setPrimaryMemberAge(parseInt(e.target.value))}
-                  min={0}
-                  max={100}
-                />
-              </div>
             </div>
 
-            {/* Additional Members */}
+            {/* Member Ages - Simple list with + button */}
             <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Additional Members</label>
-              {additionalMembers.map((member, index) => (
-                <div key={index} className="flex gap-2 mb-2">
+              <label className="block text-sm font-medium mb-2">
+                Member Ages
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                Add all family members. System automatically assigns correct premium rates.
+              </p>
+              {topupMembers.map((member, index) => (
+                <div key={index} className="flex gap-2 mb-2 items-center">
+                  <span className="text-sm font-medium w-20">Member {index + 1}:</span>
                   <input
                     type="number"
                     className="flex-1 border rounded-md p-2"
                     value={member.age}
-                    onChange={(e) => updateAdditionalMemberAge(index, parseInt(e.target.value))}
+                    onChange={(e) => updateTopupMemberAge(index, parseInt(e.target.value))}
                     placeholder="Age"
                     min={0}
                     max={100}
                   />
                   <button
                     type="button"
-                    onClick={() => removeAdditionalMember(index)}
-                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600"
+                    onClick={() => removeTopupMember(index)}
+                    disabled={topupMembers.length <= 1}
+                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    title={topupMembers.length <= 1 ? "Minimum 1 member required" : "Remove member"}
                   >
                     Remove
                   </button>
@@ -345,11 +347,14 @@ export default function PremiumCalculator() {
               ))}
               <button
                 type="button"
-                onClick={addAdditionalMember}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                onClick={addTopupMember}
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
               >
-                Add Member
+                + Add Member
               </button>
+              <p className="text-xs text-gray-600 mt-2">
+                Total Members: <strong>{topupMembers.length}</strong>
+              </p>
             </div>
           </>
         )}

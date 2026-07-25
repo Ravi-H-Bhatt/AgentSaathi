@@ -45,8 +45,7 @@ export interface TopUpMediclaimInput {
   policyType: "topup";
   threshold: number;
   sumInsured: number;
-  primaryMemberAge: number;
-  additionalMembers?: Array<{ age: number }>;
+  memberAges: number[]; // Simple array of ages - no primary/additional distinction
 }
 
 export type PremiumInput = IndividualMediclaimInput | FloaterMediclaimInput | TopUpMediclaimInput;
@@ -433,72 +432,56 @@ function getTopUpAgeBand(age: number): string {
 
 /**
  * Calculate Top-Up Mediclaim Premium
- * Fetches premium for primary member and all additional members, then sums them
+ * SIMPLE: Just fetch premium for each member's age and sum them all up
+ * No primary/additional distinction - treat all members equally
  */
 async function calculateTopUpPremium(
   input: TopUpMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
 
-  // Track individual member premiums for display
-  const memberPremiums: Array<{ age: number; premium: number }> = [];
-
-  // 1. Fetch primary member premium
-  const primaryAgeBand = getTopUpAgeBand(input.primaryMemberAge);
-  const { data: primaryData, error: primaryError } = await db
-    .from("nia_topup_mediclaim")
-    .select("premium")
-    .eq("threshold", input.threshold)
-    .eq("sum_insured", input.sumInsured)
-    .eq("member_type", "primary")
-    .eq("age_band", primaryAgeBand)
-    .maybeSingle();
-
-  if (primaryError || !primaryData) {
-    throw new Error(
-      `Premium not available for Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}, and Primary Member Age ${input.primaryMemberAge} (Age Band: ${primaryAgeBand})`
-    );
+  // Validation: must have at least 1 member
+  if (!input.memberAges || input.memberAges.length === 0) {
+    throw new Error("At least one member is required for Top-Up Mediclaim");
   }
 
-  const primaryPremium = primaryData.premium;
-  memberPremiums.push({ age: input.primaryMemberAge, premium: primaryPremium });
-  let basePremium = primaryPremium;
+  const memberPremiums: Array<{ age: number; premium: number }> = [];
+  let basePremium = 0;
 
-  // 2. Add additional members' premiums
-  if (input.additionalMembers && input.additionalMembers.length > 0) {
-    for (const member of input.additionalMembers) {
-      const memberAgeBand = getTopUpAgeBand(member.age);
-      const { data: memberData, error: memberError } = await db
-        .from("nia_topup_mediclaim")
-        .select("premium")
-        .eq("threshold", input.threshold)
-        .eq("sum_insured", input.sumInsured)
-        .eq("member_type", "additional")
-        .eq("age_band", memberAgeBand)
-        .maybeSingle();
+  // Fetch premium for EACH member and add them all up
+  for (const age of input.memberAges) {
+    const ageBand = getTopUpAgeBand(age);
+    
+    // Use 'additional' member type for ALL members (uniform rates)
+    const { data: memberData, error: memberError } = await db
+      .from("nia_topup_mediclaim")
+      .select("premium")
+      .eq("threshold", input.threshold)
+      .eq("sum_insured", input.sumInsured)
+      .eq("member_type", "additional") // Same rate for everyone
+      .eq("age_band", ageBand)
+      .maybeSingle();
 
-      if (memberError || !memberData) {
-        throw new Error(
-          `Premium not available for additional member age ${member.age} (Age Band: ${memberAgeBand})`
-        );
-      }
-
-      const additionalPremium = memberData.premium;
-      memberPremiums.push({ age: member.age, premium: additionalPremium });
-      basePremium += additionalPremium;
+    if (memberError || !memberData) {
+      throw new Error(
+        `Premium not available for age ${age} (Band: ${ageBand}), Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}`
+      );
     }
+
+    memberPremiums.push({ age, premium: memberData.premium });
+    basePremium += memberData.premium;
   }
 
   return {
     policyType: "Top-Up Mediclaim",
     basePremium,
-    memberPremiums, // Show individual member premiums like floater
+    memberPremiums, // Show each member's age and premium
     subtotal: basePremium,
     gst: 0,
     totalPremium: basePremium,
     details: {
       sumInsured: input.sumInsured,
-      policyTerm: 1, // Top-up is typically annual
+      policyTerm: 1,
     },
   };
 }
