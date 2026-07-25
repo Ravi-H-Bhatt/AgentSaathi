@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentAgent } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import PremiumCalculator from "@/components/PremiumCalculator";
 
@@ -8,36 +8,14 @@ export const metadata = {
 };
 
 export default async function PremiumPage() {
-  const supabase = await createClient();
+  const agent = await getCurrentAgent();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
+  if (!agent) {
     redirect("/login");
   }
 
-  // Both agents and colleagues can calculate premium
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
-  const canCalculate = profile?.role === "agent" || profile?.role === "colleague";
-
-  if (!canCalculate) {
-    return (
-      <div className="p-8">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
-            You do not have permission to access the premium calculator.
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Both agents (owners) and colleagues can access premium calculator
+  // No permission check needed - all authenticated users can calculate premium
 
   return <PremiumCalculator />;
 }

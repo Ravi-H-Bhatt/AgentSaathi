@@ -8,6 +8,7 @@ import { StatCard } from "@/components/StatCard";
 import { Reveal } from "@/components/Reveal";
 import { RenewalsList } from "@/components/RenewalsList";
 import { PremiumAnalytics } from "@/components/PremiumAnalytics";
+import { PolicySearch } from "@/components/PolicySearch";
 import type { Client, Policy } from "@/lib/types";
 
 // Always render fresh so renewal day-counts and totals are never stale.
