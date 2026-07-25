@@ -267,9 +267,8 @@ export async function POST(request: NextRequest) {
   if (isUnitedIndia) {
     try {
       console.log('[extract] Detected United India Insurance policy');
-      const { extractUnitedIndia } = await import('@/lib/unitedindia');
-      const base64Pdf = bytes.toString('base64');
-      const extracted = await extractUnitedIndia(base64Pdf);
+      const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
+      const extracted = parseUnitedIndiaText(text);
       
       // Convert to RegisterRow format for matching logic
       const policyRow = {
