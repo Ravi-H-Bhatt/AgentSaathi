@@ -10,13 +10,33 @@ import type {
   PremiumBreakdown,
 } from "@/lib/premium-calculator";
 
+// Sum Insured values available in New India Assurance premium data
+// Based on official premium chart: 1L to 15L
 const SUM_INSURED_OPTIONS = [
-  100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 1000000,
-  1200000, 1500000, 2000000, 2500000, 3000000,
+  100000,   // 1L
+  200000,   // 2L
+  300000,   // 3L
+  400000,   // 4L
+  500000,   // 5L
+  600000,   // 6L
+  700000,   // 7L
+  800000,   // 8L
+  1000000,  // 10L
+  1200000,  // 12L
+  1500000,  // 15L (Maximum)
 ];
 
+// Top-Up Mediclaim Threshold values (based on available premium data)
 const THRESHOLD_OPTIONS = [
-  300000, 400000, 500000, 600000, 700000, 800000, 1000000, 1500000, 2000000,
+  300000,   // 3L
+  400000,   // 4L
+  500000,   // 5L
+  600000,   // 6L
+  700000,   // 7L
+  800000,   // 8L
+  1000000,  // 10L
+  1500000,  // 15L
+  2000000,  // 20L
 ];
 
 export default function PremiumCalculator() {
@@ -27,16 +47,20 @@ export default function PremiumCalculator() {
 
   // Individual/Floater fields
   const [age, setAge] = useState(30);
-  const [eldestAge, setEldestAge] = useState(35);
   const [sumInsured, setSumInsured] = useState(500000);
   const [zone, setZone] = useState<Zone>("zone1");
-  const [numberOfMembers, setNumberOfMembers] = useState(2);
   const [optionalCoverI, setOptionalCoverI] = useState(false);
   const [optionalCoverII, setOptionalCoverII] = useState(false);
   const [optionalCoverIII, setOptionalCoverIII] = useState(false);
   const [voluntaryCoPay, setVoluntaryCoPay] = useState(false);
   const [optionalCoverV, setOptionalCoverV] = useState(false);
   const [policyTerm, setPolicyTerm] = useState<1 | 2 | 3>(1);
+
+  // Floater fields - require minimum 2 members with individual ages
+  const [floaterMembers, setFloaterMembers] = useState<Array<{ age: number }>>([
+    { age: 35 },
+    { age: 32 }
+  ]);
 
   // Top-Up fields
   const [threshold, setThreshold] = useState(500000);
@@ -65,12 +89,23 @@ export default function PremiumCalculator() {
           policyTerm,
         };
       } else if (policyType === "floater") {
+        // Validation: floater requires minimum 2 members
+        if (floaterMembers.length < 2) {
+          setError("Floater Mediclaim requires at least 2 members");
+          setLoading(false);
+          return;
+        }
+        
+        // Calculate eldest age from all members
+        const eldestAge = Math.max(...floaterMembers.map(m => m.age));
+        
         input = {
           policyType: "floater",
           eldestAge,
           sumInsured,
           zone,
-          numberOfMembers,
+          numberOfMembers: floaterMembers.length,
+          memberAges: floaterMembers.map(m => m.age),
           optionalCoverI,
           optionalCoverII,
           optionalCoverIII,
@@ -108,6 +143,28 @@ export default function PremiumCalculator() {
     }
   };
 
+  // Floater member management
+  const addFloaterMember = () => {
+    setFloaterMembers([...floaterMembers, { age: 25 }]);
+  };
+
+  const removeFloaterMember = (index: number) => {
+    // Prevent removing if only 2 members left (minimum required)
+    if (floaterMembers.length <= 2) {
+      setError("Floater Mediclaim requires at least 2 members");
+      return;
+    }
+    setFloaterMembers(floaterMembers.filter((_, i) => i !== index));
+    setError(null);
+  };
+
+  const updateFloaterMemberAge = (index: number, age: number) => {
+    const updated = [...floaterMembers];
+    updated[index] = { age };
+    setFloaterMembers(updated);
+  };
+
+  // Top-up member management
   const addAdditionalMember = () => {
     setAdditionalMembers([...additionalMembers, { age: 25 }]);
   };
@@ -174,42 +231,60 @@ export default function PremiumCalculator() {
         {/* Floater Mediclaim Fields */}
         {policyType === "floater" && (
           <>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Eldest Member Age</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-md p-2"
-                  value={eldestAge}
-                  onChange={(e) => setEldestAge(parseInt(e.target.value))}
-                  min={18}
-                  max={100}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Number of Members</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-md p-2"
-                  value={numberOfMembers}
-                  onChange={(e) => setNumberOfMembers(parseInt(e.target.value))}
-                  min={2}
-                  max={10}
-                />
-              </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Zone</label>
+              <select
+                className="w-full border rounded-md p-2"
+                value={zone}
+                onChange={(e) => setZone(e.target.value as Zone)}
+              >
+                <option value="zone1">Zone 1</option>
+                <option value="zone2">Zone 2</option>
+              </select>
             </div>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Zone</label>
-                <select
-                  className="w-full border rounded-md p-2"
-                  value={zone}
-                  onChange={(e) => setZone(e.target.value as Zone)}
-                >
-                  <option value="zone1">Zone 1</option>
-                  <option value="zone2">Zone 2</option>
-                </select>
-              </div>
+
+            {/* Family Members (Minimum 2 Required) */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                Family Members <span className="text-red-500">(Minimum 2 Required)</span>
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                Floater Mediclaim covers the entire family under one sum insured. Add each member's age.
+              </p>
+              {floaterMembers.map((member, index) => (
+                <div key={index} className="flex gap-2 mb-2 items-center">
+                  <span className="text-sm font-medium w-20">Member {index + 1}:</span>
+                  <input
+                    type="number"
+                    className="flex-1 border rounded-md p-2"
+                    value={member.age}
+                    onChange={(e) => updateFloaterMemberAge(index, parseInt(e.target.value))}
+                    placeholder="Age"
+                    min={0}
+                    max={100}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeFloaterMember(index)}
+                    disabled={floaterMembers.length <= 2}
+                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                    title={floaterMembers.length <= 2 ? "Minimum 2 members required" : "Remove member"}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addFloaterMember}
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                Add Member
+              </button>
+              <p className="text-xs text-gray-600 mt-2">
+                Total Members: <strong>{floaterMembers.length}</strong> | 
+                Eldest Age: <strong>{Math.max(...floaterMembers.map(m => m.age))}</strong> years
+              </p>
             </div>
           </>
         )}
@@ -413,61 +488,108 @@ export default function PremiumCalculator() {
               <span className="font-medium">Policy Type:</span>
               <span>{breakdown.policyType}</span>
             </div>
-            <div className="flex justify-between border-b pb-2">
+            <div className="flex justify-between border-b pb-2 bg-blue-50 px-2 py-2">
               <span className="font-medium">Base Premium:</span>
-              <span>₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
+              <span className="font-semibold">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
             </div>
+            
+            {/* Optional Covers (Additions) */}
+            {(breakdown.optionalCoverI || breakdown.optionalCoverII || breakdown.optionalCoverIII || breakdown.optionalCoverV) && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-600 mb-1">Additional Covers:</p>
+              </div>
+            )}
             {breakdown.optionalCoverI && (
-              <div className="flex justify-between border-b pb-2">
-                <span className="font-medium">Optional Cover I:</span>
-                <span>₹{breakdown.optionalCoverI.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm">+ Optional Cover I (No Proportionate Deduction):</span>
+                <span className="text-blue-600">+₹{breakdown.optionalCoverI.toLocaleString("en-IN")}</span>
               </div>
             )}
             {breakdown.optionalCoverII && (
-              <div className="flex justify-between border-b pb-2">
-                <span className="font-medium">Optional Cover II:</span>
-                <span>₹{breakdown.optionalCoverII.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm">+ Optional Cover II (Maternity Benefit):</span>
+                <span className="text-blue-600">+₹{breakdown.optionalCoverII.toLocaleString("en-IN")}</span>
               </div>
             )}
             {breakdown.optionalCoverIII && (
-              <div className="flex justify-between border-b pb-2">
-                <span className="font-medium">Optional Cover III:</span>
-                <span>₹{breakdown.optionalCoverIII.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm">+ Optional Cover III (Cataract Limit):</span>
+                <span className="text-blue-600">+₹{breakdown.optionalCoverIII.toLocaleString("en-IN")}</span>
               </div>
             )}
             {breakdown.optionalCoverV && (
-              <div className="flex justify-between border-b pb-2">
-                <span className="font-medium">Optional Cover V:</span>
-                <span>₹{breakdown.optionalCoverV.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm">+ Optional Cover V (Non-Medical Items):</span>
+                <span className="text-blue-600">+₹{breakdown.optionalCoverV.toLocaleString("en-IN")}</span>
+              </div>
+            )}
+
+            {/* Subtotal before discounts */}
+            {(breakdown.voluntaryCoPay || breakdown.familyDiscount || breakdown.longTermDiscount) && (
+              <div className="flex justify-between border-b pb-2 bg-gray-50 px-2 py-2 mt-2">
+                <span className="font-medium">Subtotal (before discounts):</span>
+                <span className="font-semibold">
+                  ₹{(
+                    breakdown.basePremium +
+                    (breakdown.optionalCoverI || 0) +
+                    (breakdown.optionalCoverII || 0) +
+                    (breakdown.optionalCoverIII || 0) +
+                    (breakdown.optionalCoverV || 0)
+                  ).toLocaleString("en-IN")}
+                </span>
+              </div>
+            )}
+
+            {/* Discounts (Deductions) */}
+            {(breakdown.voluntaryCoPay || breakdown.familyDiscount || breakdown.longTermDiscount) && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-green-600 mb-1">Discounts Applied:</p>
               </div>
             )}
             {breakdown.voluntaryCoPay && (
-              <div className="flex justify-between border-b pb-2 text-green-600">
-                <span className="font-medium">Voluntary Co-Pay Discount:</span>
-                <span>₹{breakdown.voluntaryCoPay.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm text-green-700">− Voluntary Co-Pay (20% = 15% discount):</span>
+                <span className="text-green-600 font-semibold">−₹{Math.abs(breakdown.voluntaryCoPay).toLocaleString("en-IN")}</span>
               </div>
             )}
             {breakdown.familyDiscount && (
-              <div className="flex justify-between border-b pb-2 text-green-600">
-                <span className="font-medium">Family Discount:</span>
-                <span>₹{breakdown.familyDiscount.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm text-green-700">− Family Discount:</span>
+                <span className="text-green-600 font-semibold">−₹{Math.abs(breakdown.familyDiscount).toLocaleString("en-IN")}</span>
               </div>
             )}
             {breakdown.longTermDiscount && (
-              <div className="flex justify-between border-b pb-2 text-green-600">
-                <span className="font-medium">Long Term Discount:</span>
-                <span>₹{breakdown.longTermDiscount.toLocaleString("en-IN")}</span>
+              <div className="flex justify-between border-b pb-2 pl-4">
+                <span className="font-medium text-sm text-green-700">− Long Term Discount ({breakdown.details.policyTerm} year{breakdown.details.policyTerm > 1 ? 's' : ''}):</span>
+                <span className="text-green-600 font-semibold">−₹{Math.abs(breakdown.longTermDiscount).toLocaleString("en-IN")}</span>
               </div>
             )}
-            <div className="flex justify-between border-b pb-2">
-              <span className="font-medium">GST:</span>
-              <span>₹0</span>
+
+            {/* GST */}
+            <div className="flex justify-between border-b pb-2 mt-2">
+              <span className="font-medium">GST (18%):</span>
+              <span>₹0 <span className="text-xs text-gray-500">(included)</span></span>
             </div>
-            <div className="flex justify-between pt-4 text-xl font-bold">
+
+            {/* Total Premium */}
+            <div className="flex justify-between pt-4 text-xl font-bold bg-green-50 px-4 py-3 rounded-lg mt-4">
               <span>Total Premium:</span>
               <span className="text-green-600">
                 ₹{breakdown.totalPremium.toLocaleString("en-IN")}
               </span>
+            </div>
+
+            {/* Summary Details */}
+            <div className="mt-4 pt-4 border-t text-sm text-gray-600">
+              <p><strong>Policy Details:</strong></p>
+              <ul className="list-disc list-inside mt-2 space-y-1">
+                <li>Sum Insured: ₹{breakdown.details.sumInsured.toLocaleString("en-IN")}</li>
+                {breakdown.details.age && <li>Age: {breakdown.details.age} years</li>}
+                {breakdown.details.eldestAge && <li>Eldest Member Age: {breakdown.details.eldestAge} years</li>}
+                {breakdown.details.numberOfMembers && <li>Number of Members: {breakdown.details.numberOfMembers}</li>}
+                {breakdown.details.zone && <li>Zone: {breakdown.details.zone === 'zone1' ? 'Zone 1' : 'Zone 2'}</li>}
+                <li>Policy Term: {breakdown.details.policyTerm} year{breakdown.details.policyTerm > 1 ? 's' : ''}</li>
+              </ul>
             </div>
           </div>
         </div>

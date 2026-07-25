@@ -140,8 +140,7 @@ export function ClientDetail({
 
   // Inline mobile-number entry/editing.
   //  - No phone on file      → can ADD a number.
-  //  - Manually-added number → can EDIT it.
-  //  - Extracted number      → stays FIXED (no edit).
+  //  - Any phone number      → can EDIT it (manually added or extracted from PDF).
   const [phone, setPhone] = useState<string | null>(client.phone);
   const [phoneManual, setPhoneManual] = useState<boolean>(!!client.phone_manual);
   const [phoneInput, setPhoneInput] = useState("");
@@ -505,15 +504,13 @@ export function ClientDetail({
                       </a>
                     )}
                     {emailBtn}
-                    {/* Only manually-entered numbers are editable; extracted stay fixed. */}
-                    {phoneManual && (
-                      <button
-                        onClick={startEditPhone}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition"
-                      >
-                        <Pencil size={13} /> Edit
-                      </button>
-                    )}
+                    {/* All phone numbers are now editable (manually added or extracted from PDF). */}
+                    <button
+                      onClick={startEditPhone}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition"
+                    >
+                      <Pencil size={13} /> Edit
+                    </button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 flex-wrap">

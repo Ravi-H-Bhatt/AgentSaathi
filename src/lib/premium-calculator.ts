@@ -32,6 +32,7 @@ export interface FloaterMediclaimInput {
   sumInsured: number;
   zone: Zone;
   numberOfMembers: number;
+  memberAges?: number[]; // Individual ages of all members (optional for backwards compatibility)
   optionalCoverI?: boolean;
   optionalCoverII?: boolean;
   optionalCoverIII?: boolean;

@@ -132,7 +132,11 @@ export function AppShell({
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setMobileOpen(false)}
+              onClick={() => {
+                setMobileOpen(false);
+                // Scroll to top when clicking nav link
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
               prefetch={true}
               className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
                 active

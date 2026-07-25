@@ -12,6 +12,7 @@ const anthropic = new Anthropic({
 export interface UnitedIndiaExtraction {
   client_name: string;
   policy_number: string;
+  previous_policy_number?: string | null; // For matching existing policies
   company: string;
   product_name: string;
   policy_type: string;
@@ -47,16 +48,17 @@ export async function extractUnitedIndia(
 
 CRITICAL EXTRACTION RULES:
 1. Client Name: Extract the policyholder name (e.g., "MR.JIGNESH RAJENDRAKUMAR SHAH")
-2. Policy Number: Extract the policy number (e.g., "0605002825P116693180")
-3. Company: Always set to "United India Insurance"
-4. Product Name: Extract the plan name (e.g., "Individual Health Insurance - Platinum")
-5. Policy Type: Extract the policy type (e.g., "Health Insurance", "Mediclaim")
-6. Sum Insured: Extract TOTAL sum insured for all members (add all individual SI)
-7. Premium: Extract the TOTAL annual premium amount from "Total" or "Premium" field
-8. Start Date: Extract "Period of Insurance" FROM date in DD/MM/YYYY format
-9. Renewal Date: Extract "Period of Insurance" TO date in DD/MM/YYYY format
-10. Client Address: Extract complete address
-11. Policy Holder Type: Determine from number of insured persons (Individual/Family/Floater)
+2. Policy Number: Extract the CURRENT policy number (e.g., "0605002825P116693180")
+3. Previous Policy Number: Extract the "Previous Policy No." if present (e.g., "0605002824P117164550")
+4. Company: Always set to "United India Insurance"
+5. Product Name: Extract the plan name (e.g., "Individual Health Insurance - Platinum")
+6. Policy Type: Extract the policy type (e.g., "Health Insurance", "Mediclaim")
+7. Sum Insured: Extract TOTAL sum insured for all members (add all individual SI)
+8. Premium: Extract the TOTAL annual premium amount from "Total" or "Premium" field
+9. Start Date: Extract "Period of Insurance" FROM date in DD/MM/YYYY format
+10. Renewal Date: Extract "Period of Insurance" TO date in DD/MM/YYYY format
+11. Client Address: Extract complete address
+12. Policy Holder Type: Determine from number of insured persons (Individual/Family/Floater)
 
 IMPORTANT FOR SUM INSURED:
 - If multiple members with different SI (e.g., 200000, 200000, 150000, 150000)
@@ -72,6 +74,7 @@ Return ONLY valid JSON with this exact structure:
 {
   "client_name": "string",
   "policy_number": "string",
+  "previous_policy_number": "string or null",
   "company": "United India Insurance",
   "product_name": "string",
   "policy_type": "string",
