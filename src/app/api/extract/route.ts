@@ -124,8 +124,30 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // LIC "Premium Due List" — deterministic, highest priority (its own format
-  // and dedup/renewal rules). Detect before the generic register parsers.
+  // LIC "Date Wise Premium Due" — newest format with F.U.P as actual renewal date
+  {
+    const { looksLikeLicDateWise, parseLicDateWise } = await import(
+      "@/lib/lic-date-wise"
+    );
+    if (looksLikeLicDateWise(text)) {
+      const licRows = parseLicDateWise(text);
+      if (licRows.length > 0) {
+        console.log(`[extract] Detected LIC Date Wise Premium Due: ${licRows.length} rows`);
+        return NextResponse.json({
+          filePath: path,
+          fileName: file.name,
+          scanned: false,
+          mode: "bulk",
+          rowCount: licRows.length,
+          rows: licRows,
+          registerType: "lic-date-wise",
+          confidence: 1.0,
+        });
+      }
+    }
+  }
+
+  // LIC "Premium Due List" — older format, check after Date Wise format
   {
     const { looksLikeLicPremiumDueList, parseLicPremiumDueList } = await import(
       "@/lib/lic-premium-due"
