@@ -3,11 +3,16 @@
  * Extracts policy details from United India health insurance policy PDFs
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-});
+// Lazy-init Groq client to ensure env is loaded
+let groqClient: Groq | null = null;
+function getGroqClient(): Groq {
+  if (!groqClient) {
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY || "" });
+  }
+  return groqClient;
+}
 
 export interface UnitedIndiaExtraction {
   client_name: string;
@@ -27,19 +32,19 @@ export interface UnitedIndiaExtraction {
 export async function extractUnitedIndia(
   pdfBase64: string
 ): Promise<UnitedIndiaExtraction> {
-  const response = await anthropic.messages.create({
-    model: "claude-3-5-sonnet-20241022",
+  const response = await getGroqClient().chat.completions.create({
+    model: "llama-3.2-90b-vision-preview",
+    temperature: 0,
     max_tokens: 2000,
+    response_format: { type: "json_object" },
     messages: [
       {
         role: "user",
         content: [
           {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
+            type: "image_url",
+            image_url: {
+              url: `data:application/pdf;base64,${pdfBase64}`,
             },
           },
           {
@@ -91,19 +96,13 @@ Return ONLY valid JSON with this exact structure:
     ],
   });
 
-  const textContent = response.content.find((c) => c.type === "text");
-  if (!textContent || textContent.type !== "text") {
-    throw new Error("No text response from Claude");
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    throw new Error("No response from Groq");
   }
 
-  // Extract JSON from response
-  let jsonText = textContent.text.trim();
-  
-  // Remove markdown code blocks if present
-  jsonText = jsonText.replace(/```json\n?/g, "").replace(/```\n?/g, "");
-  
-  // Parse and validate
-  const data = JSON.parse(jsonText) as UnitedIndiaExtraction;
+  // Parse JSON response
+  const data = JSON.parse(content) as UnitedIndiaExtraction;
 
   // Validate required fields
   if (!data.client_name || !data.policy_number || !data.company) {
