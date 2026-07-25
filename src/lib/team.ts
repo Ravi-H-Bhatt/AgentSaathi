@@ -21,7 +21,9 @@ export function isColleague(agent: Agent): boolean {
 export function permissionsFor(agent: Agent): Permissions {
   if (!agent.parent_agent_id)
     return { ai: true, clients: true, upload: true, email: true, delete: true };
-  return { ...DEFAULT_PERMISSIONS, ...(agent.permissions || {}) };
+  // Colleagues can delete policies and clients (delete is always enabled for
+  // colleagues so the delete buttons show regardless of stored permissions).
+  return { ...DEFAULT_PERMISSIONS, ...(agent.permissions || {}), delete: true };
 }
 
 /**

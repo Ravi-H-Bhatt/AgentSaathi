@@ -117,7 +117,7 @@ async function removePolicyFiles(
  *  - DELETE /api/clients?id=<clientId>   → delete one client
  *  - DELETE /api/clients?all=1           → delete ALL clients
  *
- * Owner-only. Colleagues are blocked entirely (no delete in colleague mode).
+ * Owners and colleagues (who now have delete enabled) can delete.
  * Policies are removed via the DB cascade; stored PDFs are cleaned up too.
  */
 export async function DELETE(request: NextRequest) {

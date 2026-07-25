@@ -82,7 +82,12 @@ export default async function ClientsPage() {
           </Link>
         </div>
       </div>
-      <ClientsList clients={data} />
+      <ClientsList
+        clients={data}
+        showModeFilter={workspace === "lic"}
+        fullClients={workspace === "lic" ? clientsWithPolicies : []}
+        agentName={agent.full_name || agent.email}
+      />
     </div>
   );
 }
