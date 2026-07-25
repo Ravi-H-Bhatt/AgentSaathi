@@ -31,6 +31,15 @@ export default async function ClientsPage() {
       )
     );
 
+    // Collect all unique payment modes from this client's policies
+    const modes = Array.from(
+      new Set(
+        c.policies
+          .map((p) => p.mode)
+          .filter((m): m is string => !!m)
+      )
+    );
+
     return {
       id: c.id,
       full_name: c.full_name,
@@ -42,6 +51,7 @@ export default async function ClientsPage() {
         .map((p) => p.policy_number)
         .filter((n): n is string => !!n),
       policyMeta,
+      modes,
     };
   });
 

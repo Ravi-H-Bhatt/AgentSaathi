@@ -71,12 +71,15 @@ function normPolicy(val: unknown): string {
 const ALIASES: Record<string, string[]> = {
   company: ["ins.co", "ins co", "insco", "insurer", "insurance company", "company"],
   policy_type: ["type of policy", "policy type", "producttype", "product type"],
-  client_name: ["name of client", "client name", "insured name", "insured", "client"],
-  premium: ["total", "gross premium", "premium", "total premium"],
-  policy_number: ["policyno", "policy no", "policy number", "policy/endt number", "policy no."],
-  start_date: ["from date", "start date", "from", "commencement date"],
-  renewal_date: ["to date", "expiry date", "renewal date", "policy expiry date", "to"],
+  client_name: ["name of client", "client name", "insured name", "insured", "client", "name of assured", "assured name"],
+  premium: ["total", "gross premium", "premium", "total premium", "instprem", "inst prem", "installment premium"],
+  policy_number: ["policyno", "policy no", "policy number", "policy/endt number", "policy no.", "policy_number", "policynumber"],
+  start_date: ["from date", "start date", "from", "commencement date", "d.o.c", "doc", "date of commencement"],
+  renewal_date: ["to date", "expiry date", "renewal date", "policy expiry date", "to", "f.u.p", "fup", "first unpaid premium"],
 };
+
+// Columns to explicitly IGNORE (serial numbers, not policy numbers)
+const IGNORE_COLUMNS = ["sr no", "sr. no", "sr.no", "srno", "s.no", "s no", "sno", "serial", "serial no", "serial number"];
 
 function matchColumn(header: string): string | null {
   // Normalise: lowercase, collapse internal whitespace, drop a trailing period.
@@ -85,6 +88,13 @@ function matchColumn(header: string): string | null {
     .toLowerCase()
     .replace(/\s+/g, " ")
     .replace(/\.$/, "");
+  
+  // Check if this is a column we should explicitly ignore (like SR NO)
+  if (IGNORE_COLUMNS.includes(h)) {
+    console.log(`[transaction-report-excel] Ignoring column: "${header}"`);
+    return null;
+  }
+  
   for (const [field, names] of Object.entries(ALIASES)) {
     if (names.includes(h)) return field;
   }
@@ -126,6 +136,21 @@ function mapColumns(buffer: Buffer): {
       bestRow = i;
     }
   }
+  
+  // Log the detected column mapping for debugging
+  if (bestRow >= 0) {
+    console.log(`[transaction-report-excel] Header row: ${bestRow}`);
+    console.log(`[transaction-report-excel] Column mapping:`, bestMap);
+    const headerRow = data[bestRow] || [];
+    headerRow.forEach((cell, idx) => {
+      const cleaned = clean(cell);
+      const field = matchColumn(cleaned);
+      if (field) {
+        console.log(`  - Column ${idx}: "${cleaned}" → ${field}`);
+      }
+    });
+  }
+  
   return { data, headerRow: bestRow, colOf: bestMap };
 }
 

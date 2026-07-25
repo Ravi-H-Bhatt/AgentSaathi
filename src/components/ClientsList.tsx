@@ -15,14 +15,25 @@ interface Row {
   policyNumbers: string[];
   /** Searchable policy metadata: policy types, product names, insurers. */
   policyMeta?: string[];
+  /** Payment modes from policies (for filtering) */
+  modes?: string[];
 }
 
 // Persist the search term so it survives page refresh and back-navigation
 // (e.g. open a client, then tap "← All clients" — the search stays put).
 const STORAGE_KEY = "clients-search-q";
+const MODES_STORAGE_KEY = "clients-mode-filters";
+
+const MODE_OPTIONS = [
+  { value: "Monthly", label: "Monthly", match: ["MLY", "MONTHLY", "M"] },
+  { value: "Quarterly", label: "Quarterly", match: ["QLY", "QUARTERLY", "Q"] },
+  { value: "Half-Yearly", label: "Half-Yearly", match: ["HLY", "HALF-YEARLY", "HALF YEARLY", "H"] },
+  { value: "Yearly", label: "Yearly", match: ["YLY", "YEARLY", "ANNUAL", "Y"] },
+];
 
 export function ClientsList({ clients }: { clients: Row[] }) {
   const [q, setQ] = useState("");
+  const [selectedModes, setSelectedModes] = useState<Set<string>>(new Set());
 
   // Restore any previously typed search once, on mount (client-only to avoid
   // SSR hydration mismatch).
@@ -30,6 +41,11 @@ export function ClientsList({ clients }: { clients: Row[] }) {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) setQ(saved);
+      
+      const savedModes = sessionStorage.getItem(MODES_STORAGE_KEY);
+      if (savedModes) {
+        setSelectedModes(new Set(JSON.parse(savedModes)));
+      }
     } catch {
       /* storage unavailable — ignore */
     }
@@ -44,19 +60,65 @@ export function ClientsList({ clients }: { clients: Row[] }) {
     }
   }, [q]);
 
+  // Keep selected modes in sync with storage
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(MODES_STORAGE_KEY, JSON.stringify([...selectedModes]));
+    } catch {
+      /* ignore */
+    }
+  }, [selectedModes]);
+
+  const toggleMode = (mode: string) => {
+    setSelectedModes((prev) => {
+      const next = new Set(prev);
+      if (next.has(mode)) {
+        next.delete(mode);
+      } else {
+        next.add(mode);
+      }
+      return next;
+    });
+  };
+
+  const clearModeFilters = () => {
+    setSelectedModes(new Set());
+  };
+
   const filtered = useMemo(() => {
+    let result = clients;
+    
+    // Apply mode filters if any are selected
+    if (selectedModes.size > 0) {
+      result = result.filter((c) => {
+        const clientModes = c.modes || [];
+        // Check if any of the client's policy modes match any selected filter
+        return [...selectedModes].some((selectedMode) => {
+          const option = MODE_OPTIONS.find(opt => opt.value === selectedMode);
+          if (!option) return false;
+          return clientModes.some((mode) => 
+            option.match.some(m => mode.toUpperCase().includes(m))
+          );
+        });
+      });
+    }
+    
+    // Apply search term
     const term = q.trim().toLowerCase();
-    if (!term) return clients;
-    return clients.filter(
-      (c) =>
-        c.full_name.toLowerCase().includes(term) ||
-        c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
-        (c.policyMeta || []).some((m) => m.toLowerCase().includes(term)) ||
-        (c.email || "").toLowerCase().includes(term) ||
-        (c.phone || "").toLowerCase().includes(term) ||
-        (c.address || "").toLowerCase().includes(term)
-    );
-  }, [q, clients]);
+    if (term) {
+      result = result.filter(
+        (c) =>
+          c.full_name.toLowerCase().includes(term) ||
+          c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
+          (c.policyMeta || []).some((m) => m.toLowerCase().includes(term)) ||
+          (c.email || "").toLowerCase().includes(term) ||
+          (c.phone || "").toLowerCase().includes(term) ||
+          (c.address || "").toLowerCase().includes(term)
+      );
+    }
+    
+    return result;
+  }, [q, clients, selectedModes]);
 
   // Group alphabetically by first letter.
   const groups = useMemo(() => {
@@ -71,6 +133,42 @@ export function ClientsList({ clients }: { clients: Row[] }) {
 
   return (
     <div className="space-y-5">
+      {/* Mode Filter Checkboxes */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold">Filter by Payment Mode</p>
+          {selectedModes.size > 0 && (
+            <button
+              onClick={clearModeFilters}
+              className="text-xs text-muted hover:text-foreground transition"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {MODE_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:bg-black/[.02] cursor-pointer transition"
+            >
+              <input
+                type="checkbox"
+                checked={selectedModes.has(option.value)}
+                onChange={() => toggleMode(option.value)}
+                className="rounded border-border text-foreground focus:ring-2 focus:ring-foreground/10"
+              />
+              <span className="text-sm">{option.label}</span>
+            </label>
+          ))}
+        </div>
+        {selectedModes.size > 0 && (
+          <p className="text-xs text-muted mt-2">
+            Showing clients with {[...selectedModes].join(", ")} policies
+          </p>
+        )}
+      </div>
+
       <div className="relative">
         <Search
           size={18}
@@ -95,7 +193,7 @@ export function ClientsList({ clients }: { clients: Row[] }) {
       </div>
       {q.trim() && (
         <p className="text-xs text-muted -mt-2 px-1">
-          {filtered.length} {filtered.length === 1 ? "match" : "matches"} for “{q.trim()}”
+          {filtered.length} {filtered.length === 1 ? "match" : "matches"} for "{q.trim()}"
         </p>
       )}
 
@@ -103,6 +201,8 @@ export function ClientsList({ clients }: { clients: Row[] }) {
         <div className="rounded-2xl border border-border bg-card py-16 text-center text-muted text-sm">
           {clients.length === 0
             ? "No clients yet. Upload a policy to get started."
+            : selectedModes.size > 0 
+            ? "No clients match the selected payment modes."
             : "No clients match your search."}
         </div>
       ) : (
