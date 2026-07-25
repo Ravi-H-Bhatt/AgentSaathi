@@ -26,18 +26,27 @@ const SUM_INSURED_OPTIONS = [
   1500000,  // 15L (Maximum)
 ];
 
-// Top-Up Mediclaim Threshold values (based on available premium data)
-const THRESHOLD_OPTIONS = [
-  300000,   // 3L
-  400000,   // 4L
-  500000,   // 5L
-  600000,   // 6L
-  700000,   // 7L
-  800000,   // 8L
-  1000000,  // 10L
-  1500000,  // 15L
-  2000000,  // 20L
-];
+// Top-Up Mediclaim: Threshold-to-Sum Insured Mapping Matrix
+// OFFICIAL RULES: Each Sum Insured has specific allowed Threshold values
+const TOPUP_MATRIX = {
+  500000: [500000],           // Sum Insured 5L -> Threshold ONLY 5L
+  1000000: [1000000],         // Sum Insured 10L -> Threshold ONLY 10L
+  1500000: [1500000],         // Sum Insured 15L -> Threshold ONLY 15L
+  700000: [800000],           // Sum Insured 7L -> Threshold ONLY 8L
+  1200000: [800000],          // Sum Insured 12L -> Threshold ONLY 8L
+  1700000: [800000],          // Sum Insured 17L -> Threshold ONLY 8L
+  2200000: [800000],          // Sum Insured 22L -> Threshold ONLY 8L
+} as const;
+
+// Sum Insured values that are valid for Top-Up
+const TOPUP_SUM_INSURED_OPTIONS = Object.keys(TOPUP_MATRIX)
+  .map(Number)
+  .sort((a, b) => a - b);
+
+// All possible thresholds (derived from matrix)
+const ALL_THRESHOLD_OPTIONS = Array.from(
+  new Set(Object.values(TOPUP_MATRIX).flat())
+).sort((a, b) => a - b);
 
 export default function PremiumCalculator() {
   const [policyType, setPolicyType] = useState<PolicyType>("individual");
@@ -63,10 +72,15 @@ export default function PremiumCalculator() {
   ]);
 
   // Top-Up fields - simple list of member ages
-  const [threshold, setThreshold] = useState(500000);
+  const [threshold, setThreshold] = useState(800000);
   const [topupMembers, setTopupMembers] = useState<Array<{ age: number }>>([
-    { age: 35 } // Start with 1 member
+    { age: 47 } // Start with eldest member as per primary member rule
   ]);
+
+  // Determine valid threshold options based on selected Sum Insured
+  const getValidThresholds = (si: number): number[] => {
+    return TOPUP_MATRIX[si as keyof typeof TOPUP_MATRIX] || [];
+  };
 
   const handleCalculate = async () => {
     setLoading(true);
@@ -299,52 +313,97 @@ export default function PremiumCalculator() {
           <>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Threshold</label>
+                <label className="block text-sm font-medium mb-2">
+                  Sum Insured <span className="text-red-500">*</span>
+                </label>
+                <select
+                  className="w-full border rounded-md p-2"
+                  value={sumInsured}
+                  onChange={(e) => {
+                    const newSI = parseInt(e.target.value);
+                    setSumInsured(newSI);
+                    // Auto-select the only valid threshold for this Sum Insured
+                    const validThresholds = getValidThresholds(newSI);
+                    if (validThresholds.length > 0 && !validThresholds.includes(threshold)) {
+                      setThreshold(validThresholds[0]);
+                    }
+                  }}
+                >
+                  {TOPUP_SUM_INSURED_OPTIONS.map((si) => (
+                    <option key={si} value={si}>
+                      ₹{si.toLocaleString("en-IN")}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Allowed Threshold: ₹{getValidThresholds(sumInsured)[0]?.toLocaleString("en-IN")}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Threshold/Deductible <span className="text-red-500">*</span>
+                </label>
                 <select
                   className="w-full border rounded-md p-2"
                   value={threshold}
                   onChange={(e) => setThreshold(parseInt(e.target.value))}
+                  disabled={getValidThresholds(sumInsured).length === 0}
                 >
-                  {THRESHOLD_OPTIONS.map((t) => (
+                  {getValidThresholds(sumInsured).map((t) => (
                     <option key={t} value={t}>
                       ₹{t.toLocaleString("en-IN")}
                     </option>
                   ))}
                 </select>
+                {getValidThresholds(sumInsured).length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">
+                    No valid thresholds available for this Sum Insured
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  <strong>Rule:</strong> Only one threshold allowed per Sum Insured
+                </p>
               </div>
             </div>
 
             {/* Member Ages - Simple list with + button */}
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2">
-                Member Ages
+                Family Members <span className="text-red-500">(Primary Member = Eldest)</span>
               </label>
               <p className="text-xs text-gray-500 mb-3">
-                Add all family members. System automatically assigns correct premium rates.
+                Add all family members by age. System automatically designates the eldest as PRIMARY member with higher rate.
               </p>
-              {topupMembers.map((member, index) => (
-                <div key={index} className="flex gap-2 mb-2 items-center">
-                  <span className="text-sm font-medium w-20">Member {index + 1}:</span>
-                  <input
-                    type="number"
-                    className="flex-1 border rounded-md p-2"
-                    value={member.age}
-                    onChange={(e) => updateTopupMemberAge(index, parseInt(e.target.value))}
-                    placeholder="Age"
-                    min={0}
-                    max={100}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeTopupMember(index)}
-                    disabled={topupMembers.length <= 1}
-                    className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    title={topupMembers.length <= 1 ? "Minimum 1 member required" : "Remove member"}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+              {topupMembers.map((member, index) => {
+                const eldestAge = Math.max(...topupMembers.map(m => m.age));
+                const isPrimary = member.age === eldestAge && topupMembers.some(m => m.age === eldestAge);
+                return (
+                  <div key={index} className="flex gap-2 mb-2 items-center">
+                    <span className={`text-sm font-medium w-32 ${isPrimary ? 'text-blue-600 font-bold' : ''}`}>
+                      Member {index + 1}{isPrimary ? ' (PRIMARY)' : ' (Additional)'}:
+                    </span>
+                    <input
+                      type="number"
+                      className={`flex-1 border rounded-md p-2 ${isPrimary ? 'border-blue-500 bg-blue-50' : ''}`}
+                      value={member.age}
+                      onChange={(e) => updateTopupMemberAge(index, parseInt(e.target.value))}
+                      placeholder="Age"
+                      min={0}
+                      max={100}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeTopupMember(index)}
+                      disabled={topupMembers.length <= 1}
+                      className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      title={topupMembers.length <= 1 ? "Minimum 1 member required" : "Remove member"}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
               <button
                 type="button"
                 onClick={addTopupMember}
@@ -353,8 +412,12 @@ export default function PremiumCalculator() {
                 + Add Member
               </button>
               <p className="text-xs text-gray-600 mt-2">
-                Total Members: <strong>{topupMembers.length}</strong>
+                Total Members: <strong>{topupMembers.length}</strong> | 
+                Eldest (Primary): <strong>{Math.max(...topupMembers.map(m => m.age))} years</strong>
               </p>
+              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                <strong>Primary Member Rate Applied:</strong> The eldest member receives the "Primary" rate. All others receive "Additional" rates.
+              </div>
             </div>
           </>
         )}
@@ -379,18 +442,7 @@ export default function PremiumCalculator() {
 
         {policyType === "topup" && (
           <div className="mb-4">
-            <label className="block text-sm font-medium mb-2">Sum Insured</label>
-            <select
-              className="w-full border rounded-md p-2"
-              value={sumInsured}
-              onChange={(e) => setSumInsured(parseInt(e.target.value))}
-            >
-              {SUM_INSURED_OPTIONS.map((si) => (
-                <option key={si} value={si}>
-                  ₹{si.toLocaleString("en-IN")}
-                </option>
-              ))}
-            </select>
+            {/* Sum Insured is now shown in the Top-Up section above */}
           </div>
         )}
 
@@ -494,13 +546,17 @@ export default function PremiumCalculator() {
               <span>{breakdown.policyType}</span>
             </div>
             
-            {/* For Floater: Show individual member premiums */}
+            {/* For Floater & Top-Up: Show individual member premiums */}
             {breakdown.memberPremiums && breakdown.memberPremiums.length > 0 && (
               <div className="mt-4 p-3 bg-blue-50 rounded-md">
-                <p className="text-xs font-semibold text-blue-700 mb-2">Member-wise Premiums:</p>
+                <p className="text-xs font-semibold text-blue-700 mb-2">
+                  {breakdown.policyType === "Top-Up Mediclaim" ? "Member-wise Premiums (PRIMARY vs ADDITIONAL):" : "Member-wise Premiums:"}
+                </p>
                 {breakdown.memberPremiums.map((member, idx) => (
                   <div key={idx} className="flex justify-between text-sm mb-1">
-                    <span>Member {idx + 1} (Age {member.age}):</span>
+                    <span>
+                      Member {idx + 1} (Age {member.age}){member.memberType ? ` - ${member.memberType.toUpperCase()}` : ''}:
+                    </span>
                     <span className="font-semibold">₹{member.premium.toLocaleString("en-IN")}</span>
                   </div>
                 ))}

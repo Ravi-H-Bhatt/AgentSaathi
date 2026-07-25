@@ -53,7 +53,7 @@ export type PremiumInput = IndividualMediclaimInput | FloaterMediclaimInput | To
 export interface PremiumBreakdown {
   policyType: string;
   basePremium: number;
-  memberPremiums?: Array<{ age: number; premium: number }>; // For floater: individual member premiums
+  memberPremiums?: Array<{ age: number; premium: number; memberType?: "primary" | "additional" }>; // For floater/topup: individual member premiums
   optionalCoverI?: number;
   optionalCoverII?: number;
   optionalCoverIII?: number;
@@ -432,8 +432,18 @@ function getTopUpAgeBand(age: number): string {
 
 /**
  * Calculate Top-Up Mediclaim Premium
- * SIMPLE: Just fetch premium for each member's age and sum them all up
- * No primary/additional distinction - treat all members equally
+ * 
+ * CRITICAL FIX: Implement Primary vs Additional Member Logic
+ * - Eldest member = PRIMARY member (higher rate)
+ * - All other members = ADDITIONAL members (lower rate)
+ * 
+ * Example (CORRECT):
+ *   Eldest (47): PRIMARY rate = 4,500
+ *   Age 35: ADDITIONAL rate = 1,400
+ *   Age 32: ADDITIONAL rate = 1,400
+ *   Total: 7,300 ✓
+ * 
+ * (NOT treating everyone as ADDITIONAL like before)
  */
 async function calculateTopUpPremium(
   input: TopUpMediclaimInput
@@ -445,37 +455,43 @@ async function calculateTopUpPremium(
     throw new Error("At least one member is required for Top-Up Mediclaim");
   }
 
-  const memberPremiums: Array<{ age: number; premium: number }> = [];
+  // CRITICAL: Find the eldest member (PRIMARY)
+  const eldestAge = Math.max(...input.memberAges);
+  
+  const memberPremiums: Array<{ age: number; premium: number; memberType: "primary" | "additional" }> = [];
   let basePremium = 0;
 
-  // Fetch premium for EACH member and add them all up
+  // Process each member
   for (const age of input.memberAges) {
     const ageBand = getTopUpAgeBand(age);
     
-    // Use 'additional' member type for ALL members (uniform rates)
+    // CRITICAL LOGIC: Determine if this is PRIMARY or ADDITIONAL
+    const isPrimary = age === eldestAge && !memberPremiums.some(m => m.memberType === "primary");
+    const memberType: "primary" | "additional" = isPrimary ? "primary" : "additional";
+
     const { data: memberData, error: memberError } = await db
       .from("nia_topup_mediclaim")
       .select("premium")
       .eq("threshold", input.threshold)
       .eq("sum_insured", input.sumInsured)
-      .eq("member_type", "additional") // Same rate for everyone
+      .eq("member_type", memberType)  // PRIMARY or ADDITIONAL
       .eq("age_band", ageBand)
       .maybeSingle();
 
     if (memberError || !memberData) {
       throw new Error(
-        `Premium not available for age ${age} (Band: ${ageBand}), Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}`
+        `Premium not available for ${memberType} member age ${age} (Band: ${ageBand}), Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}`
       );
     }
 
-    memberPremiums.push({ age, premium: memberData.premium });
+    memberPremiums.push({ age, premium: memberData.premium, memberType });
     basePremium += memberData.premium;
   }
 
   return {
     policyType: "Top-Up Mediclaim",
     basePremium,
-    memberPremiums, // Show each member's age and premium
+    memberPremiums, // Show each member's age, type, and premium
     subtotal: basePremium,
     gst: 0,
     totalPremium: basePremium,
