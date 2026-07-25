@@ -1,113 +1,3 @@
--- ============================================================
--- RUN THIS SQL IN SUPABASE DASHBOARD → SQL EDITOR
--- ============================================================
-
--- 📱 Agent phone number (used as the "(M)" mobile in intimation emails).
-alter table public.agents add column if not exists phone text;
-
--- 📋 Policy holder type (Individual, Family, Floater, etc.)
-alter table public.policies add column if not exists policy_holder_type text;
-
--- 🔧 Maintenance / "Work in Progress" mode toggle (single-row settings table)
-create table if not exists public.app_settings (
-  id boolean primary key default true,
-  maintenance_mode boolean not null default false,
-  maintenance_message text,
-  updated_at timestamptz not null default now(),
-  constraint app_settings_singleton check (id)
-);
-insert into public.app_settings (id, maintenance_mode)
-values (true, false)
-on conflict (id) do nothing;
-
-
--- ⚠️ URGENT FIX: Drop the unique constraint that blocks re-upload.
--- The app now deduplicates using a COMPOSITE key (policy_number + client
--- + product + premium + dates), so the same policy_number can legitimately
--- appear multiple times with different premiums/dates. This constraint was
--- causing: "duplicate key value violates unique constraint
--- policies_agent_policy_number_unique". Dropping it is SAFE — no data is
--- deleted, it only removes the blocking rule.
-alter table public.policies
-  drop constraint if exists policies_agent_policy_number_unique;
-
--- ============================================================
--- Error reporting + email drafts tables (safe to re-run)
--- ============================================================
-
--- Create error_reports table
-create table if not exists public.error_reports (
-  id uuid primary key default gen_random_uuid(),
-  reporter_id uuid not null references public.agents (id) on delete cascade,
-  reporter_name text,
-  reporter_email text,
-  owner_id uuid references public.agents (id) on delete set null,
-  message text not null,
-  page text,
-  status text not null default 'open' check (status in ('open', 'resolved')),
-  created_at timestamptz not null default now()
-);
-
-create index if not exists error_reports_status_idx on public.error_reports (status, created_at desc);
-create index if not exists error_reports_reporter_idx on public.error_reports (reporter_id);
-
--- Enable RLS
-alter table public.error_reports enable row level security;
-
--- RLS Policies
-drop policy if exists error_reports_insert_agent on public.error_reports;
-create policy error_reports_insert_agent on public.error_reports
-  for insert with check (reporter_id = auth.uid());
-
-drop policy if exists error_reports_read_own on public.error_reports;
-create policy error_reports_read_own on public.error_reports
-  for select using (reporter_id = auth.uid() or public.is_admin());
-
-drop policy if exists error_reports_admin_all on public.error_reports;
-create policy error_reports_admin_all on public.error_reports
-  for all using (public.is_admin()) with check (public.is_admin());
-
--- Create email_drafts table (if not exists)
-create table if not exists public.email_drafts (
-  id uuid primary key default gen_random_uuid(),
-  agent_id uuid not null references public.agents (id) on delete cascade,
-  policy_id uuid references public.policies (id) on delete set null,
-  client_email text not null,
-  subject text not null,
-  body text not null,
-  status text not null default 'draft' check (status in ('draft', 'sent', 'discarded')),
-  created_at timestamptz not null default now()
-);
-
-create index if not exists email_drafts_agent_idx on public.email_drafts (agent_id, created_at desc);
-
--- Enable RLS
-alter table public.email_drafts enable row level security;
-
-drop policy if exists email_drafts_owner_all on public.email_drafts;
-create policy email_drafts_owner_all on public.email_drafts
-  for all using (agent_id = auth.uid()) with check (agent_id = auth.uid());
-
--- ============================================================
--- VERIFICATION
--- ============================================================
--- Confirm the constraint is gone (should return 0 rows):
-SELECT conname FROM pg_constraint
-WHERE conname = 'policies_agent_policy_number_unique';
-
--- Confirm tables exist:
-SELECT
-  table_name,
-  (SELECT count(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count
-FROM information_schema.tables t
-WHERE table_schema = 'public'
-AND table_name IN ('error_reports', 'email_drafts')
-ORDER BY table_name;
-
--- ============================================================
--- PREMIUM CALCULATOR TABLES (New India Assurance)
--- ============================================================
-
 -- Premium Calculator Tables for New India Assurance
 -- These tables store exact premium values from official premium charts
 
@@ -125,7 +15,7 @@ CREATE TABLE IF NOT EXISTS nia_mediclaim_individual (
 );
 
 -- Index for fast lookups
-CREATE INDEX IF NOT EXISTS idx_nia_individual_lookup ON nia_mediclaim_individual(zone, age_min, age_max, sum_insured);
+CREATE INDEX idx_nia_individual_lookup ON nia_mediclaim_individual(zone, age_min, age_max, sum_insured);
 
 -- 2. New India Floater Mediclaim Premium Table
 CREATE TABLE IF NOT EXISTS nia_mediclaim_floater (
@@ -140,7 +30,7 @@ CREATE TABLE IF NOT EXISTS nia_mediclaim_floater (
   UNIQUE(zone, age_min, age_max, sum_insured)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nia_floater_lookup ON nia_mediclaim_floater(zone, age_min, age_max, sum_insured);
+CREATE INDEX idx_nia_floater_lookup ON nia_mediclaim_floater(zone, age_min, age_max, sum_insured);
 
 -- 3. Optional Cover I - No Proportionate Deduction
 CREATE TABLE IF NOT EXISTS nia_optional_cover_i (
@@ -152,7 +42,7 @@ CREATE TABLE IF NOT EXISTS nia_optional_cover_i (
   UNIQUE(sum_insured, age_band)
 );
 
-CREATE INDEX IF NOT EXISTS idx_optional_i_lookup ON nia_optional_cover_i(sum_insured, age_band);
+CREATE INDEX idx_optional_i_lookup ON nia_optional_cover_i(sum_insured, age_band);
 
 -- 4. Optional Cover II - Maternity Benefit
 CREATE TABLE IF NOT EXISTS nia_optional_cover_ii (
@@ -172,7 +62,7 @@ CREATE TABLE IF NOT EXISTS nia_optional_cover_iii (
   UNIQUE(sum_insured, age_band)
 );
 
-CREATE INDEX IF NOT EXISTS idx_optional_iii_lookup ON nia_optional_cover_iii(sum_insured, age_band);
+CREATE INDEX idx_optional_iii_lookup ON nia_optional_cover_iii(sum_insured, age_band);
 
 -- 6. Optional Cover V - Non-Medical Items (Consumables)
 -- Fixed premium of Rs. 1500 for SI >= 8L, stored as a constant
@@ -189,7 +79,7 @@ CREATE TABLE IF NOT EXISTS nia_topup_mediclaim (
   UNIQUE(threshold, sum_insured, member_type, age_band)
 );
 
-CREATE INDEX IF NOT EXISTS idx_topup_lookup ON nia_topup_mediclaim(threshold, sum_insured, member_type, age_band);
+CREATE INDEX idx_topup_lookup ON nia_topup_mediclaim(threshold, sum_insured, member_type, age_band);
 
 -- 8. Premium Configuration (stores rules and constants)
 CREATE TABLE IF NOT EXISTS premium_config (
@@ -257,15 +147,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS update_nia_mediclaim_individual_updated_at ON nia_mediclaim_individual;
 CREATE TRIGGER update_nia_mediclaim_individual_updated_at BEFORE UPDATE ON nia_mediclaim_individual
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-DROP TRIGGER IF EXISTS update_nia_mediclaim_floater_updated_at ON nia_mediclaim_floater;
 CREATE TRIGGER update_nia_mediclaim_floater_updated_at BEFORE UPDATE ON nia_mediclaim_floater
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-DROP TRIGGER IF EXISTS update_premium_config_updated_at ON premium_config;
 CREATE TRIGGER update_premium_config_updated_at BEFORE UPDATE ON premium_config
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -285,8 +172,3 @@ COMMENT ON TABLE nia_optional_cover_ii IS 'Premium for Optional Cover II - Mater
 COMMENT ON TABLE nia_optional_cover_iii IS 'Premium for Optional Cover III - Revision in Cataract Limit';
 COMMENT ON TABLE nia_topup_mediclaim IS 'Premium rates for New India Top-Up Mediclaim Policy';
 COMMENT ON TABLE premium_config IS 'Configuration and rules for premium calculation';
-
--- ============================================================
--- SAMPLE DATA (from premium charts page 1)
--- ============================================================
--- Run seed_premium_data.sql separately to populate with full data

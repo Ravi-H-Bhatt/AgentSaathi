@@ -15,6 +15,7 @@ import {
   UsersRound,
   MessageSquare,
   Mail,
+  Calculator,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { Assistant } from "@/components/Assistant";
@@ -70,6 +71,8 @@ export function AppShell({
     nav.push({ href: "/clients", label: "Clients", icon: Users });
   if (!isColleague || permissions.upload)
     nav.push({ href: "/upload", label: "Upload policy", icon: Upload });
+  // Premium Calculator - accessible to all agents and colleagues
+  nav.push({ href: "/premium", label: "Premium Calculator", icon: Calculator });
   // Email composer
   nav.push({ href: "/email", label: "Compose Email", icon: Mail });
   // Only owners manage colleagues.
