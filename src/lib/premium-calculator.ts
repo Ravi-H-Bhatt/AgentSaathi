@@ -238,22 +238,33 @@ async function calculateIndividualPremium(
 
 /**
  * Calculate Floater Mediclaim Premium
- * For floater policies, we need to calculate premium for each member and sum them up
+ * 
+ * CRITICAL: Apply Primary vs Additional Member Logic
+ * - Eldest member = PRIMARY member (higher rate)
+ * - All other members = ADDITIONAL members (lower rate)
  */
 async function calculateFloaterPremium(
   input: FloaterMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
 
-  // IMPORTANT: For floater mediclaim, each member needs their own premium calculated
-  // Then all member premiums are summed to get the total base premium
-  
   let basePremium = 0;
-  const memberPremiums: Array<{ age: number; premium: number }> = [];
-  const memberAges = input.memberAges || [input.eldestAge]; // Fallback for backwards compatibility
+  const memberPremiums: Array<{ age: number; premium: number; memberType: "primary" | "additional" }> = [];
+  const memberAges = input.memberAges || [input.eldestAge];
   
-  // Calculate premium for each member
+  // Sort to identify primary (eldest) member
+  const sortedAges = [...memberAges].sort((a, b) => b - a);
+  const primaryAge = sortedAges[0];
+  let primaryProcessed = false;
+
+  // Calculate premium for each member - PRIMARY member first
   for (const memberAge of memberAges) {
+    // Determine if this is PRIMARY or ADDITIONAL
+    const isPrimary = memberAge === primaryAge && !primaryProcessed;
+    const memberType: "primary" | "additional" = isPrimary ? "primary" : "additional";
+    
+    if (isPrimary) primaryProcessed = true;
+
     const { data: memberPremiumData, error: memberError } = await db
       .from("nia_mediclaim_floater")
       .select("premium")
@@ -261,19 +272,17 @@ async function calculateFloaterPremium(
       .lte("age_min", memberAge)
       .gte("age_max", memberAge)
       .eq("sum_insured", input.sumInsured)
+      .eq("member_type", memberType)
       .single();
 
     if (memberError || !memberPremiumData) {
       throw new Error(
-        `Premium not available for member age ${memberAge} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
+        `Premium not available for ${memberType} member age ${memberAge} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
       );
     }
     
-    // Track individual member premium
     const memberPremium = memberPremiumData.premium;
-    memberPremiums.push({ age: memberAge, premium: memberPremium });
-    
-    // Add this member's premium to the total
+    memberPremiums.push({ age: memberAge, premium: memberPremium, memberType });
     basePremium += memberPremium;
   }
 
@@ -283,7 +292,7 @@ async function calculateFloaterPremium(
   let optionalCoverV = 0;
   let voluntaryCoPay = 0;
 
-  // 2-5. Optional covers (calculated on eldest age as per policy)
+  // Optional covers (calculated on eldest age as per policy)
   if (input.optionalCoverI) {
     const ageBand = getAgeBand(input.eldestAge);
     const { data } = await db
@@ -324,7 +333,7 @@ async function calculateFloaterPremium(
     if (data) optionalCoverV = parseInt(data.value as string) * input.numberOfMembers;
   }
 
-  // 6. Voluntary Co-Pay (on base premium only)
+  // Voluntary Co-Pay (on base premium only)
   if (input.voluntaryCoPay) {
     const { data } = await db
       .from("premium_config")
@@ -337,7 +346,7 @@ async function calculateFloaterPremium(
     }
   }
 
-  // 7. Family discount (5% for 2 members, 10% for 3 members, 15% for 4+ members)
+  // Family discount (5% for 2 members, 10% for 3 members, 15% for 4+ members)
   let familyDiscount = 0;
   if (input.numberOfMembers >= 2) {
     const { data } = await db
@@ -348,7 +357,6 @@ async function calculateFloaterPremium(
 
     if (data) {
       const discounts = data.value as Record<string, number>;
-      // Map members: 2->5%, 3->10%, 4+->15%
       const memberKey = input.numberOfMembers >= 4 ? "4" : input.numberOfMembers.toString();
       const discountPercent = discounts[memberKey] || 0;
       
@@ -360,7 +368,7 @@ async function calculateFloaterPremium(
     }
   }
 
-  // 8. Long-term discount
+  // Long-term discount
   let longTermDiscount = 0;
   if (input.policyTerm > 1) {
     const { data } = await db
@@ -396,7 +404,7 @@ async function calculateFloaterPremium(
   return {
     policyType: "Floater Mediclaim",
     basePremium,
-    memberPremiums, // Include individual member premiums for display
+    memberPremiums,
     optionalCoverI: optionalCoverI || undefined,
     optionalCoverII: optionalCoverII || undefined,
     optionalCoverIII: optionalCoverIII || undefined,
