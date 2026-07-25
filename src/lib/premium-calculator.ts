@@ -54,6 +54,7 @@ export type PremiumInput = IndividualMediclaimInput | FloaterMediclaimInput | To
 export interface PremiumBreakdown {
   policyType: string;
   basePremium: number;
+  memberPremiums?: Array<{ age: number; premium: number }>; // For floater: individual member premiums
   optionalCoverI?: number;
   optionalCoverII?: number;
   optionalCoverIII?: number;
@@ -238,36 +239,52 @@ async function calculateIndividualPremium(
 
 /**
  * Calculate Floater Mediclaim Premium
+ * For floater policies, we need to calculate premium for each member and sum them up
  */
 async function calculateFloaterPremium(
   input: FloaterMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
 
-  // 1. Fetch base premium (based on eldest member age)
-  const { data: basePremiumData, error: baseError } = await db
-    .from("nia_mediclaim_floater")
-    .select("premium")
-    .eq("zone", input.zone)
-    .lte("age_min", input.eldestAge)
-    .gte("age_max", input.eldestAge)
-    .eq("sum_insured", input.sumInsured)
-    .single();
+  // IMPORTANT: For floater mediclaim, each member needs their own premium calculated
+  // Then all member premiums are summed to get the total base premium
+  
+  let basePremium = 0;
+  const memberPremiums: Array<{ age: number; premium: number }> = [];
+  const memberAges = input.memberAges || [input.eldestAge]; // Fallback for backwards compatibility
+  
+  // Calculate premium for each member
+  for (const memberAge of memberAges) {
+    const { data: memberPremiumData, error: memberError } = await db
+      .from("nia_mediclaim_floater")
+      .select("premium")
+      .eq("zone", input.zone)
+      .lte("age_min", memberAge)
+      .gte("age_max", memberAge)
+      .eq("sum_insured", input.sumInsured)
+      .single();
 
-  if (baseError || !basePremiumData) {
-    throw new Error(
-      `Premium not available for eldest age ${input.eldestAge} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
-    );
+    if (memberError || !memberPremiumData) {
+      throw new Error(
+        `Premium not available for member age ${memberAge} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
+      );
+    }
+    
+    // Track individual member premium
+    const memberPremium = memberPremiumData.premium;
+    memberPremiums.push({ age: memberAge, premium: memberPremium });
+    
+    // Add this member's premium to the total
+    basePremium += memberPremium;
   }
 
-  let basePremium = basePremiumData.premium;
   let optionalCoverI = 0;
   let optionalCoverII = 0;
   let optionalCoverIII = 0;
   let optionalCoverV = 0;
   let voluntaryCoPay = 0;
 
-  // 2-5. Optional covers (same logic as individual)
+  // 2-5. Optional covers (calculated on eldest age as per policy)
   if (input.optionalCoverI) {
     const ageBand = getAgeBand(input.eldestAge);
     const { data } = await db
@@ -308,7 +325,7 @@ async function calculateFloaterPremium(
     if (data) optionalCoverV = parseInt(data.value as string) * input.numberOfMembers;
   }
 
-  // 6. Voluntary Co-Pay
+  // 6. Voluntary Co-Pay (on base premium only)
   if (input.voluntaryCoPay) {
     const { data } = await db
       .from("premium_config")
@@ -376,6 +393,7 @@ async function calculateFloaterPremium(
   return {
     policyType: "Floater Mediclaim",
     basePremium,
+    memberPremiums, // Include individual member premiums for display
     optionalCoverI: optionalCoverI || undefined,
     optionalCoverII: optionalCoverII || undefined,
     optionalCoverIII: optionalCoverIII || undefined,
@@ -398,20 +416,15 @@ async function calculateFloaterPremium(
 
 /**
  * Get age band for top-up mediclaim
+ * Map ages to the exact bands available in database
  */
 function getTopUpAgeBand(age: number): string {
-  if (age < 20) return "<20";
-  if (age <= 25) return "21-25";
-  if (age <= 30) return "26-30";
-  if (age <= 35) return "31-35";
-  if (age <= 40) return "36-40";
-  if (age <= 45) return "41-45";
-  if (age <= 50) return "46-50";
-  if (age <= 55) return "51-55";
-  if (age <= 60) return "56-60";
-  if (age <= 65) return "61-65";
-  if (age <= 70) return "66-70";
-  throw new Error(`Age ${age} is not eligible for Top-Up Mediclaim`);
+  if (age < 18) return "0-17";
+  if (age <= 44) return "18-44";
+  if (age <= 54) return "45-54";
+  if (age <= 60) return "55-60";
+  // Ages 61+ use 61-65 band (highest available)
+  return "61-65";
 }
 
 /**

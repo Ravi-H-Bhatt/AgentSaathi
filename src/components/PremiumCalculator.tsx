@@ -314,8 +314,8 @@ export default function PremiumCalculator() {
                   className="w-full border rounded-md p-2"
                   value={primaryMemberAge}
                   onChange={(e) => setPrimaryMemberAge(parseInt(e.target.value))}
-                  min={18}
-                  max={70}
+                  min={0}
+                  max={100}
                 />
               </div>
             </div>
@@ -331,8 +331,8 @@ export default function PremiumCalculator() {
                     value={member.age}
                     onChange={(e) => updateAdditionalMemberAge(index, parseInt(e.target.value))}
                     placeholder="Age"
-                    min={18}
-                    max={70}
+                    min={0}
+                    max={100}
                   />
                   <button
                     type="button"
@@ -488,10 +488,31 @@ export default function PremiumCalculator() {
               <span className="font-medium">Policy Type:</span>
               <span>{breakdown.policyType}</span>
             </div>
-            <div className="flex justify-between border-b pb-2 bg-blue-50 px-2 py-2">
-              <span className="font-medium">Base Premium:</span>
-              <span className="font-semibold">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
-            </div>
+            
+            {/* For Floater: Show individual member premiums */}
+            {breakdown.memberPremiums && breakdown.memberPremiums.length > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                <p className="text-xs font-semibold text-blue-700 mb-2">Member-wise Premiums:</p>
+                {breakdown.memberPremiums.map((member, idx) => (
+                  <div key={idx} className="flex justify-between text-sm mb-1">
+                    <span>Member {idx + 1} (Age {member.age}):</span>
+                    <span className="font-semibold">₹{member.premium.toLocaleString("en-IN")}</span>
+                  </div>
+                ))}
+                <div className="border-t border-blue-200 pt-2 mt-2 flex justify-between font-semibold">
+                  <span>Total Base Premium (Sum of all members):</span>
+                  <span className="text-blue-600">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* For Non-Floater: Show base premium */}
+            {!breakdown.memberPremiums && (
+              <div className="flex justify-between border-b pb-2 bg-blue-50 px-2 py-2">
+                <span className="font-medium">Base Premium:</span>
+                <span className="font-semibold">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
+              </div>
+            )}
             
             {/* Optional Covers (Additions) */}
             {(breakdown.optionalCoverI || breakdown.optionalCoverII || breakdown.optionalCoverIII || breakdown.optionalCoverV) && (
