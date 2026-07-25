@@ -338,7 +338,7 @@ async function calculateFloaterPremium(
     }
   }
 
-  // 7. Family discount
+  // 7. Family discount (5% for 2 members, 10% for 3 members, 15% for 4+ members)
   let familyDiscount = 0;
   if (input.numberOfMembers >= 2) {
     const { data } = await db
@@ -349,11 +349,15 @@ async function calculateFloaterPremium(
 
     if (data) {
       const discounts = data.value as Record<string, number>;
+      // Map members: 2->5%, 3->10%, 4+->15%
       const memberKey = input.numberOfMembers >= 4 ? "4" : input.numberOfMembers.toString();
       const discountPercent = discounts[memberKey] || 0;
-      const subtotalBeforeDiscount =
-        basePremium + voluntaryCoPay + optionalCoverI + optionalCoverII + optionalCoverIII + optionalCoverV;
-      familyDiscount = -Math.round((subtotalBeforeDiscount * discountPercent) / 100);
+      
+      if (discountPercent > 0) {
+        const subtotalBeforeDiscount =
+          basePremium + voluntaryCoPay + optionalCoverI + optionalCoverII + optionalCoverIII + optionalCoverV;
+        familyDiscount = -Math.round((subtotalBeforeDiscount * discountPercent) / 100);
+      }
     }
   }
 
@@ -429,11 +433,15 @@ function getTopUpAgeBand(age: number): string {
 
 /**
  * Calculate Top-Up Mediclaim Premium
+ * Fetches premium for primary member and all additional members, then sums them
  */
 async function calculateTopUpPremium(
   input: TopUpMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
+
+  // Track individual member premiums for display
+  const memberPremiums: Array<{ age: number; premium: number }> = [];
 
   // 1. Fetch primary member premium
   const primaryAgeBand = getTopUpAgeBand(input.primaryMemberAge);
@@ -444,22 +452,23 @@ async function calculateTopUpPremium(
     .eq("sum_insured", input.sumInsured)
     .eq("member_type", "primary")
     .eq("age_band", primaryAgeBand)
-    .single();
+    .maybeSingle();
 
   if (primaryError || !primaryData) {
     throw new Error(
-      `Premium not available for Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}, and Primary Member Age ${input.primaryMemberAge}`
+      `Premium not available for Threshold ₹${input.threshold.toLocaleString("en-IN")}, Sum Insured ₹${input.sumInsured.toLocaleString("en-IN")}, and Primary Member Age ${input.primaryMemberAge} (Age Band: ${primaryAgeBand})`
     );
   }
 
-  let basePremium = primaryData.premium;
+  const primaryPremium = primaryData.premium;
+  memberPremiums.push({ age: input.primaryMemberAge, premium: primaryPremium });
+  let basePremium = primaryPremium;
 
   // 2. Add additional members' premiums
-  let additionalMembersPremium = 0;
   if (input.additionalMembers && input.additionalMembers.length > 0) {
     for (const member of input.additionalMembers) {
       const memberAgeBand = getTopUpAgeBand(member.age);
-      const { data: memberData } = await db
+      const { data: memberData, error: memberError } = await db
         .from("nia_topup_mediclaim")
         .select("premium")
         .eq("threshold", input.threshold)
@@ -468,20 +477,25 @@ async function calculateTopUpPremium(
         .eq("age_band", memberAgeBand)
         .maybeSingle();
 
-      if (memberData) {
-        additionalMembersPremium += memberData.premium;
+      if (memberError || !memberData) {
+        throw new Error(
+          `Premium not available for additional member age ${member.age} (Age Band: ${memberAgeBand})`
+        );
       }
+
+      const additionalPremium = memberData.premium;
+      memberPremiums.push({ age: member.age, premium: additionalPremium });
+      basePremium += additionalPremium;
     }
   }
-
-  const totalPremium = basePremium + additionalMembersPremium;
 
   return {
     policyType: "Top-Up Mediclaim",
     basePremium,
-    subtotal: totalPremium,
+    memberPremiums, // Show individual member premiums like floater
+    subtotal: basePremium,
     gst: 0,
-    totalPremium,
+    totalPremium: basePremium,
     details: {
       sumInsured: input.sumInsured,
       policyTerm: 1, // Top-up is typically annual

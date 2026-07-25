@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS premium_config (
 
 -- Insert configuration rules
 INSERT INTO premium_config (key, value, description) VALUES
-('floater_discount', '{"2": 0, "3": 5, "4": 10}', 'Family member discount percentages'),
+('floater_discount', '{"2": 5, "3": 10, "4": 15}', 'Family member discount percentages: 5% for 2, 10% for 3, 15% for 4+'),
 ('long_term_discount', '{"1": 0, "2": 5, "3": 7}', 'Long term policy discount by year'),
 ('voluntary_copay_discount', '15', 'Discount for 20% voluntary co-pay'),
 ('optional_cover_v_premium', '1500', 'Fixed premium for non-medical items cover'),
