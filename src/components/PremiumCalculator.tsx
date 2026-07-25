@@ -29,13 +29,13 @@ const SUM_INSURED_OPTIONS = [
 // Top-Up Mediclaim: Threshold-to-Sum Insured Mapping Matrix
 // OFFICIAL RULES: Each Sum Insured has specific allowed Threshold values
 const TOPUP_MATRIX: Record<number, number[]> = {
-  500000: [500000],           // Sum Insured 5L -> Threshold ONLY 5L
-  1000000: [1000000],         // Sum Insured 10L -> Threshold ONLY 10L
-  1500000: [1500000],         // Sum Insured 15L -> Threshold ONLY 15L
-  700000: [800000],           // Sum Insured 7L -> Threshold ONLY 8L
-  1200000: [800000],          // Sum Insured 12L -> Threshold ONLY 8L
-  1700000: [800000],          // Sum Insured 17L -> Threshold ONLY 8L
-  2200000: [800000],          // Sum Insured 22L -> Threshold ONLY 8L
+  500000: [500000],      // 5L → 5L
+  700000: [800000],      // 7L → 8L
+  1000000: [500000],     // 10L → 5L
+  1200000: [800000],     // 12L → 8L
+  1500000: [500000],     // 15L → 5L
+  1700000: [800000],     // 17L → 8L
+  2200000: [800000]      // 22L → 8L
 };
 
 // Sum Insured values that are valid for Top-Up
