@@ -15,8 +15,9 @@ export type Zone = "zone1" | "zone2";
 
 export interface IndividualMediclaimInput {
   policyType: "individual";
-  age: number;
-  sumInsured: number;
+  age?: number; // For single member (backwards compatibility)
+  sumInsured?: number; // For single member (backwards compatibility)
+  members?: Array<{ age: number; sumInsured: number }>; // For multiple members
   zone: Zone;
   optionalCoverI?: boolean;
   optionalCoverII?: boolean;
@@ -53,7 +54,12 @@ export type PremiumInput = IndividualMediclaimInput | FloaterMediclaimInput | To
 export interface PremiumBreakdown {
   policyType: string;
   basePremium: number;
-  memberPremiums?: Array<{ age: number; premium: number; memberType?: "primary" | "additional" }>; // For floater/topup: individual member premiums
+  memberPremiums?: Array<{ 
+    age: number; 
+    premium: number; 
+    memberType?: "primary" | "additional"; // For Top-Up only
+    sumInsured?: number; // For Individual with multiple members
+  }>; // For floater/topup: individual member premiums
   optionalCoverI?: number;
   optionalCoverII?: number;
   optionalCoverIII?: number;
@@ -89,29 +95,59 @@ function getAgeBand(age: number): string {
 
 /**
  * Calculate Individual Mediclaim Premium
+ * 
+ * SUPPORTS TWO MODES:
+ * 1. Single member: uses age + sumInsured
+ * 2. Multiple members: uses members array with individual age + sumInsured per member
+ *    - Shows premiums SEPARATELY for each member (NOT added up)
  */
 async function calculateIndividualPremium(
   input: IndividualMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
 
-  // 1. Fetch base premium
-  const { data: basePremiumData, error: baseError } = await db
-    .from("nia_mediclaim_individual")
-    .select("premium")
-    .eq("zone", input.zone)
-    .lte("age_min", input.age)
-    .gte("age_max", input.age)
-    .eq("sum_insured", input.sumInsured)
-    .single();
-
-  if (baseError || !basePremiumData) {
-    throw new Error(
-      `Premium not available for age ${input.age} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
-    );
+  // Determine mode: single member or multiple members
+  const members = input.members || (input.age && input.sumInsured ? [{ age: input.age, sumInsured: input.sumInsured }] : []);
+  
+  if (members.length === 0) {
+    throw new Error("At least one member is required for Individual Mediclaim");
   }
 
-  let basePremium = basePremiumData.premium;
+  const memberPremiums: Array<{ age: number; sumInsured: number; premium: number }> = [];
+  let totalBasePremium = 0;
+
+  // Calculate premium for each member separately
+  for (const member of members) {
+    const { data: premiumData, error: premiumError } = await db
+      .from("nia_mediclaim_individual")
+      .select("premium")
+      .eq("zone", input.zone)
+      .lte("age_min", member.age)
+      .gte("age_max", member.age)
+      .eq("sum_insured", member.sumInsured)
+      .single();
+
+    if (premiumError || !premiumData) {
+      throw new Error(
+        `Premium not available for age ${member.age} and sum insured ₹${member.sumInsured.toLocaleString("en-IN")}`
+      );
+    }
+
+    memberPremiums.push({
+      age: member.age,
+      sumInsured: member.sumInsured,
+      premium: premiumData.premium
+    });
+    
+    // For multi-member: we DON'T add up premiums, show separately
+    // For single-member: we use the premium for calculations
+    totalBasePremium = premiumData.premium; // Use last one (or only one) for discount calculations
+  }
+
+  // Use the first member's data for optional covers if multiple members
+  const referenceAge = members[0].age;
+  const referenceSumInsured = members[0].sumInsured;
+
   let optionalCoverI = 0;
   let optionalCoverII = 0;
   let optionalCoverIII = 0;
@@ -120,11 +156,11 @@ async function calculateIndividualPremium(
 
   // 2. Optional Cover I - No Proportionate Deduction
   if (input.optionalCoverI) {
-    const ageBand = getAgeBand(input.age);
+    const ageBand = getAgeBand(referenceAge);
     const { data } = await db
       .from("nia_optional_cover_i")
       .select("premium")
-      .eq("sum_insured", input.sumInsured)
+      .eq("sum_insured", referenceSumInsured)
       .eq("age_band", ageBand)
       .maybeSingle();
 
@@ -138,7 +174,7 @@ async function calculateIndividualPremium(
     const { data } = await db
       .from("nia_optional_cover_ii")
       .select("premium")
-      .eq("sum_insured", input.sumInsured)
+      .eq("sum_insured", referenceSumInsured)
       .maybeSingle();
 
     if (data) {
@@ -147,12 +183,12 @@ async function calculateIndividualPremium(
   }
 
   // 4. Optional Cover III - Revision in Cataract Limit
-  if (input.optionalCoverIII && input.sumInsured >= 800000) {
-    const ageBand = getAgeBand(input.age);
+  if (input.optionalCoverIII && referenceSumInsured >= 800000) {
+    const ageBand = getAgeBand(referenceAge);
     const { data } = await db
       .from("nia_optional_cover_iii")
       .select("premium")
-      .eq("sum_insured", input.sumInsured)
+      .eq("sum_insured", referenceSumInsured)
       .eq("age_band", ageBand)
       .maybeSingle();
 
@@ -162,7 +198,7 @@ async function calculateIndividualPremium(
   }
 
   // 5. Optional Cover V - Non-Medical Items
-  if (input.optionalCoverV && input.sumInsured >= 800000) {
+  if (input.optionalCoverV && referenceSumInsured >= 800000) {
     const { data } = await db
       .from("premium_config")
       .select("value")
@@ -184,7 +220,7 @@ async function calculateIndividualPremium(
 
     if (data) {
       const discountPercent = parseInt(data.value as string);
-      voluntaryCoPay = -Math.round((basePremium * discountPercent) / 100);
+      voluntaryCoPay = -Math.round((totalBasePremium * discountPercent) / 100);
     }
   }
 
@@ -201,13 +237,35 @@ async function calculateIndividualPremium(
       const discounts = data.value as Record<string, number>;
       const discountPercent = discounts[input.policyTerm.toString()] || 0;
       const subtotalBeforeDiscount =
-        basePremium + voluntaryCoPay + optionalCoverI + optionalCoverII + optionalCoverIII + optionalCoverV;
+        totalBasePremium + voluntaryCoPay + optionalCoverI + optionalCoverII + optionalCoverIII + optionalCoverV;
       longTermDiscount = -Math.round((subtotalBeforeDiscount * discountPercent) / 100);
     }
   }
 
+  // For multiple members: show premiums separately, don't calculate total
+  if (members.length > 1) {
+    return {
+      policyType: "Individual Mediclaim (Multiple Members)",
+      basePremium: 0, // Not applicable for multi-member display
+      memberPremiums: memberPremiums.map(m => ({ 
+        age: m.age, 
+        premium: m.premium,
+        sumInsured: m.sumInsured 
+      })) as any,
+      subtotal: 0,
+      gst: 0,
+      totalPremium: 0,
+      details: {
+        sumInsured: referenceSumInsured,
+        zone: input.zone,
+        policyTerm: input.policyTerm,
+      },
+    };
+  }
+
+  // For single member: calculate as before
   const subtotal =
-    basePremium +
+    totalBasePremium +
     voluntaryCoPay +
     optionalCoverI +
     optionalCoverII +
@@ -217,7 +275,7 @@ async function calculateIndividualPremium(
 
   return {
     policyType: "Individual Mediclaim",
-    basePremium,
+    basePremium: totalBasePremium,
     optionalCoverI: optionalCoverI || undefined,
     optionalCoverII: optionalCoverII || undefined,
     optionalCoverIII: optionalCoverIII || undefined,
@@ -228,8 +286,8 @@ async function calculateIndividualPremium(
     gst: 0,
     totalPremium: subtotal,
     details: {
-      age: input.age,
-      sumInsured: input.sumInsured,
+      age: referenceAge,
+      sumInsured: referenceSumInsured,
       zone: input.zone,
       policyTerm: input.policyTerm,
     },
@@ -239,51 +297,41 @@ async function calculateIndividualPremium(
 /**
  * Calculate Floater Mediclaim Premium
  * 
- * CRITICAL: Apply Primary vs Additional Member Logic
- * - Eldest member = PRIMARY member (higher rate)
- * - All other members = ADDITIONAL members (lower rate)
+ * CORRECT NEW INDIA FLOATER LOGIC (as per official PDF):
+ * 1. Each family member gets individual premium based on their age + sum insured
+ * 2. All member premiums are ADDED UP to get base premium
+ * 3. Family discount applied based on number of members (2=5%, 3=10%, 4+=15%)
+ * 4. Optional covers calculated on eldest member's age
+ * 5. All family members share the SAME sum insured
  */
 async function calculateFloaterPremium(
   input: FloaterMediclaimInput
 ): Promise<PremiumBreakdown> {
   const db = await createClient();
 
-  let basePremium = 0;
-  const memberPremiums: Array<{ age: number; premium: number; memberType: "primary" | "additional" }> = [];
   const memberAges = input.memberAges || [input.eldestAge];
-  
-  // Sort to identify primary (eldest) member
-  const sortedAges = [...memberAges].sort((a, b) => b - a);
-  const primaryAge = sortedAges[0];
-  let primaryProcessed = false;
+  const memberPremiums: Array<{ age: number; premium: number }> = [];
+  let basePremium = 0;
 
-  // Calculate premium for each member - PRIMARY member first
-  for (const memberAge of memberAges) {
-    // Determine if this is PRIMARY or ADDITIONAL
-    const isPrimary = memberAge === primaryAge && !primaryProcessed;
-    const memberType: "primary" | "additional" = isPrimary ? "primary" : "additional";
-    
-    if (isPrimary) primaryProcessed = true;
-
+  // Calculate premium for EACH member individually based on their age
+  for (const age of memberAges) {
     const { data: memberPremiumData, error: memberError } = await db
       .from("nia_mediclaim_floater")
       .select("premium")
       .eq("zone", input.zone)
-      .lte("age_min", memberAge)
-      .gte("age_max", memberAge)
+      .lte("age_min", age)
+      .gte("age_max", age)
       .eq("sum_insured", input.sumInsured)
-      .eq("member_type", memberType)
       .single();
 
     if (memberError || !memberPremiumData) {
       throw new Error(
-        `Premium not available for ${memberType} member age ${memberAge} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")}`
+        `Premium not available for member age ${age} and sum insured ₹${input.sumInsured.toLocaleString("en-IN")} in ${input.zone}`
       );
     }
-    
-    const memberPremium = memberPremiumData.premium;
-    memberPremiums.push({ age: memberAge, premium: memberPremium, memberType });
-    basePremium += memberPremium;
+
+    memberPremiums.push({ age, premium: memberPremiumData.premium });
+    basePremium += memberPremiumData.premium; // ADD UP all member premiums
   }
 
   let optionalCoverI = 0;
@@ -404,7 +452,7 @@ async function calculateFloaterPremium(
   return {
     policyType: "Floater Mediclaim",
     basePremium,
-    memberPremiums,
+    memberPremiums, // Show individual member premiums that were added up
     optionalCoverI: optionalCoverI || undefined,
     optionalCoverII: optionalCoverII || undefined,
     optionalCoverIII: optionalCoverIII || undefined,

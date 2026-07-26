@@ -49,9 +49,10 @@ export default function PremiumCalculator() {
   const [breakdown, setBreakdown] = useState<PremiumBreakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Individual/Floater fields
-  const [age, setAge] = useState(30);
-  const [sumInsured, setSumInsured] = useState(500000);
+  // Individual fields - support multiple members
+  const [individualMembers, setIndividualMembers] = useState<Array<{ age: number; sumInsured: number }>>([
+    { age: 30, sumInsured: 500000 }
+  ]);
   const [zone, setZone] = useState<Zone>("zone1");
   const [optionalCoverI, setOptionalCoverI] = useState(false);
   const [optionalCoverII, setOptionalCoverII] = useState(false);
@@ -65,6 +66,7 @@ export default function PremiumCalculator() {
     { age: 35 },
     { age: 32 }
   ]);
+  const [sumInsured, setSumInsured] = useState(500000); // Common for floater and topup
 
   // Top-Up fields - simple list of member ages
   const [threshold, setThreshold] = useState(800000);
@@ -88,8 +90,7 @@ export default function PremiumCalculator() {
       if (policyType === "individual") {
         input = {
           policyType: "individual",
-          age,
-          sumInsured,
+          members: individualMembers,
           zone,
           optionalCoverI,
           optionalCoverII,
@@ -151,6 +152,26 @@ export default function PremiumCalculator() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Individual member management
+  const addIndividualMember = () => {
+    setIndividualMembers([...individualMembers, { age: 25, sumInsured: 500000 }]);
+  };
+
+  const removeIndividualMember = (index: number) => {
+    if (individualMembers.length <= 1) {
+      setError("At least one member is required");
+      return;
+    }
+    setIndividualMembers(individualMembers.filter((_, i) => i !== index));
+    setError(null);
+  };
+
+  const updateIndividualMember = (index: number, field: 'age' | 'sumInsured', value: number) => {
+    const updated = [...individualMembers];
+    updated[index] = { ...updated[index], [field]: value };
+    setIndividualMembers(updated);
   };
 
   // Floater member management
@@ -216,29 +237,76 @@ export default function PremiumCalculator() {
         {/* Individual Mediclaim Fields */}
         {policyType === "individual" && (
           <>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Age</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-md p-2"
-                  value={age}
-                  onChange={(e) => setAge(parseInt(e.target.value))}
-                  min={18}
-                  max={100}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Zone</label>
-                <select
-                  className="w-full border rounded-md p-2"
-                  value={zone}
-                  onChange={(e) => setZone(e.target.value as Zone)}
-                >
-                  <option value="zone1">Zone 1</option>
-                  <option value="zone2">Zone 2</option>
-                </select>
-              </div>
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">Zone</label>
+              <select
+                className="w-full border rounded-md p-2"
+                value={zone}
+                onChange={(e) => setZone(e.target.value as Zone)}
+              >
+                <option value="zone1">Zone 1 (Maharashtra & Gujarat)</option>
+                <option value="zone2">Zone 2 (Rest of India)</option>
+              </select>
+            </div>
+
+            {/* Individual Members - Each can have different age and sum insured */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                Family Members <span className="text-blue-600">(Each member priced separately)</span>
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                Individual Mediclaim: Each member gets separate premium based on their age and sum insured. Premiums are shown separately, NOT added up.
+              </p>
+              {individualMembers.map((member, index) => (
+                <div key={index} className="mb-3 p-3 bg-gray-50 rounded-md">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-semibold">Member {index + 1}</span>
+                    {individualMembers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeIndividualMember(index)}
+                        className="text-red-500 text-sm hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Age</label>
+                      <input
+                        type="number"
+                        className="w-full border rounded-md p-2"
+                        value={member.age}
+                        onChange={(e) => updateIndividualMember(index, 'age', parseInt(e.target.value))}
+                        min={0}
+                        max={100}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">Sum Insured</label>
+                      <select
+                        className="w-full border rounded-md p-2"
+                        value={member.sumInsured}
+                        onChange={(e) => updateIndividualMember(index, 'sumInsured', parseInt(e.target.value))}
+                      >
+                        {SUM_INSURED_OPTIONS.map((si) => (
+                          <option key={si} value={si}>
+                            ₹{si.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addIndividualMember}
+                className="mt-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+              >
+                + Add Another Member
+              </button>
             </div>
           </>
         )}
@@ -264,7 +332,7 @@ export default function PremiumCalculator() {
                 Family Members <span className="text-red-500">(Minimum 2 Required)</span>
               </label>
               <p className="text-xs text-gray-500 mb-3">
-                Floater Mediclaim covers the entire family under one sum insured. Add each member&apos;s age.
+                Floater Mediclaim: All members share ONE sum insured. Each member's premium is calculated based on their age, then added up. Family discount applied automatically.
               </p>
               {floaterMembers.map((member, index) => (
                 <div key={index} className="flex gap-2 mb-2 items-center">
@@ -298,7 +366,29 @@ export default function PremiumCalculator() {
               </button>
               <p className="text-xs text-gray-600 mt-2">
                 Total Members: <strong>{floaterMembers.length}</strong> | 
-                Eldest Age: <strong>{Math.max(...floaterMembers.map(m => m.age))}</strong> years
+                Eldest Age: <strong>{Math.max(...floaterMembers.map(m => m.age))}</strong> years |
+                Family Discount: <strong>{floaterMembers.length === 2 ? '5%' : floaterMembers.length === 3 ? '10%' : '15%'}</strong>
+              </p>
+            </div>
+
+            {/* Common Sum Insured for ALL Floater Members */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium mb-2">
+                Sum Insured <span className="text-blue-600">(Shared by all members)</span>
+              </label>
+              <select
+                className="w-full border rounded-md p-2"
+                value={sumInsured}
+                onChange={(e) => setSumInsured(parseInt(e.target.value))}
+              >
+                {SUM_INSURED_OPTIONS.map((si) => (
+                  <option key={si} value={si}>
+                    ₹{si.toLocaleString("en-IN")}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                All family members share this sum insured
               </p>
             </div>
           </>
@@ -419,7 +509,7 @@ export default function PremiumCalculator() {
         )}
 
         {/* Common: Sum Insured */}
-        {policyType !== "topup" && (
+        {policyType !== "topup" && policyType !== "individual" && policyType !== "floater" && (
           <div className="mb-4">
             <label className="block text-sm font-medium mb-2">Sum Insured</label>
             <select
@@ -546,25 +636,33 @@ export default function PremiumCalculator() {
             {breakdown.memberPremiums && breakdown.memberPremiums.length > 0 && (
               <div className="mt-4 p-3 bg-blue-50 rounded-md">
                 <p className="text-xs font-semibold text-blue-700 mb-2">
-                  {breakdown.policyType === "Top-Up Mediclaim" ? "Member-wise Premiums (PRIMARY vs ADDITIONAL):" : "Member-wise Premiums:"}
+                  {breakdown.policyType === "Top-Up Mediclaim" 
+                    ? "Member-wise Premiums (PRIMARY vs ADDITIONAL):" 
+                    : breakdown.policyType.includes("Multiple Members")
+                    ? "Individual Member Premiums (Shown Separately):"
+                    : "Member-wise Premiums (Added Up):"}
                 </p>
                 {breakdown.memberPremiums.map((member, idx) => (
                   <div key={idx} className="flex justify-between text-sm mb-1">
                     <span>
-                      Member {idx + 1} (Age {member.age}){member.memberType ? ` - ${member.memberType.toUpperCase()}` : ''}:
+                      Member {idx + 1} (Age {member.age})
+                      {member.sumInsured && ` - SI: ₹${member.sumInsured.toLocaleString("en-IN")}`}
+                      {member.memberType && ` - ${member.memberType.toUpperCase()}`}:
                     </span>
                     <span className="font-semibold">₹{member.premium.toLocaleString("en-IN")}</span>
                   </div>
                 ))}
-                <div className="border-t border-blue-200 pt-2 mt-2 flex justify-between font-semibold">
-                  <span>Total Base Premium (Sum of all members):</span>
-                  <span className="text-blue-600">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
-                </div>
+                {!breakdown.policyType.includes("Multiple Members") && (
+                  <div className="border-t border-blue-200 pt-2 mt-2 flex justify-between font-semibold">
+                    <span>Total Base Premium (Sum of all members):</span>
+                    <span className="text-blue-600">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
               </div>
             )}
             
-            {/* For Non-Floater: Show base premium */}
-            {!breakdown.memberPremiums && (
+            {/* For Individual (single member): Show base premium */}
+            {!breakdown.memberPremiums && breakdown.basePremium > 0 && (
               <div className="flex justify-between border-b pb-2 bg-blue-50 px-2 py-2">
                 <span className="font-medium">Base Premium:</span>
                 <span className="font-semibold">₹{breakdown.basePremium.toLocaleString("en-IN")}</span>
