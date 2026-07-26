@@ -315,13 +315,19 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
 
 /**
  * Quick validation check for United India Floater policies
+ * Must match the same patterns as the detector!
  */
 export function isUnitedIndiaFloaterPolicy(text: string): boolean {
   const lowerText = text.toLowerCase();
-  return (
-    (lowerText.includes("united india insurance") ||
+  const isUnitedIndia = lowerText.includes("united india insurance") ||
      lowerText.includes("uiic.co.in") ||
-     (lowerText.includes("irdai reg") && lowerText.includes("545"))) &&
-    lowerText.includes("floater")
-  );
+     (lowerText.includes("irdai reg") && lowerText.includes("545"));
+  
+  if (!isUnitedIndia) return false;
+  
+  // Check for ANY floater/family indicators (match detector patterns)
+  const hasFloaterIndicator = /family\s+medicare\s+policy|family\s+floater|floater\s+mediclaim|policy\s+type\s*:?\s*family\s+floater|floater.*(?:family|group)|(?:family|group).*floater/i.test(text);
+  const hasFamilyMembers = /details?\s+of\s+(?:the\s+)?insured\s+(?:persons?|members?)|insured\s+details?/i.test(text);
+  
+  return hasFloaterIndicator || hasFamilyMembers;
 }

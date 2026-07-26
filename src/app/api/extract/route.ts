@@ -283,149 +283,143 @@ export async function POST(request: NextRequest) {
           // FAMILY FLOATER POLICY - Use floater parser
           if (detection.type === 'family-floater-policy') {
             console.log('[extract] 🔄 Routing to FLOATER parser (unitedindia-floater.ts)');
-            const { parseUnitedIndiaFloaterText, isUnitedIndiaFloaterPolicy } = await import('@/lib/unitedindia-floater');
+            const { parseUnitedIndiaFloaterText } = await import('@/lib/unitedindia-floater');
             
-            if (isUnitedIndiaFloaterPolicy(text)) {
-              try {
-                const extracted = parseUnitedIndiaFloaterText(text);
-                
-                const policyRow = {
-                  client_name: extracted.client_name,
-                  policy_number: extracted.policy_number,
-                  previous_policy_number: extracted.previous_policy_number || null,
-                  company: extracted.company || 'United India Insurance',
-                  policy_type: extracted.policy_type || 'Health Insurance',
-                  product_name: extracted.product_name || 'Floater Mediclaim',
-                  sum_insured: extracted.sum_insured,
-                  premium: extracted.premium,
-                  start_date: extracted.start_date,
-                  renewal_date: extracted.renewal_date,
-                  client_address: extracted.client_address,
-                  policy_holder_type: extracted.policy_holder_type || 'Floater',
-                  mode: extracted.mode || 'Annual',
-                };
-                
-                console.log(`[extract] ✅ United India FLOATER policy parsed: ${extracted.policy_number}`);
-                console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
-                console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
-                console.log(`[extract]    Product: ${extracted.product_name}`);
-                console.log(`[extract]    Members: ${extracted.members?.length || 0}`);
-                
-                return NextResponse.json({
-                  filePath: path,
-                  fileName: file.name,
-                  scanned: false,
-                  mode: "schedule",
-                  rows: [policyRow],
-                  registerType: 'unitedindia-floater',
-                  confidence: detection.confidence,
-                  metadata: {
-                    policy_type_detected: extracted.policy_holder_type,
-                    detection_type: detection.type,
-                    family_members: extracted.members,
-                  },
-                });
-              } catch (parseErr) {
-                console.error('[extract] United India FLOATER parser failed:', parseErr);
-                throw parseErr; // Let it fall through to generic LLM extraction
-              }
+            try {
+              const extracted = parseUnitedIndiaFloaterText(text);
+              
+              const policyRow = {
+                client_name: extracted.client_name,
+                policy_number: extracted.policy_number,
+                previous_policy_number: extracted.previous_policy_number || null,
+                company: extracted.company || 'United India Insurance',
+                policy_type: extracted.policy_type || 'Health Insurance',
+                product_name: extracted.product_name || 'Floater Mediclaim',
+                sum_insured: extracted.sum_insured,
+                premium: extracted.premium,
+                start_date: extracted.start_date,
+                renewal_date: extracted.renewal_date,
+                client_address: extracted.client_address,
+                policy_holder_type: extracted.policy_holder_type || 'Floater',
+                mode: extracted.mode || 'Annual',
+              };
+              
+              console.log(`[extract] ✅ United India FLOATER policy parsed: ${extracted.policy_number}`);
+              console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
+              console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
+              console.log(`[extract]    Product: ${extracted.product_name}`);
+              console.log(`[extract]    Members: ${extracted.members?.length || 0}`);
+              
+              return NextResponse.json({
+                filePath: path,
+                fileName: file.name,
+                scanned: false,
+                mode: "schedule",
+                rows: [policyRow],
+                registerType: 'unitedindia-floater',
+                confidence: detection.confidence,
+                metadata: {
+                  policy_type_detected: extracted.policy_holder_type,
+                  detection_type: detection.type,
+                  family_members: extracted.members,
+                },
+              });
+            } catch (parseErr) {
+              console.error('[extract] United India FLOATER parser failed:', parseErr);
+              throw parseErr; // Let it fall through to generic LLM extraction
             }
           }
           
           // INDIVIDUAL POLICY - Use individual parser
           else if (detection.type === 'individual-policy') {
             console.log('[extract] 🔄 Routing to INDIVIDUAL parser (unitedindia.ts)');
-            const { parseUnitedIndiaText, isUnitedIndiaPolicy } = await import('@/lib/unitedindia');
+            const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
             
-            if (isUnitedIndiaPolicy(text)) {
-              try {
-                const extracted = parseUnitedIndiaText(text);
-                
-                const policyRow = {
-                  client_name: extracted.client_name,
-                  policy_number: extracted.policy_number,
-                  previous_policy_number: extracted.previous_policy_number || null,
-                  company: extracted.company || 'United India Insurance',
-                  policy_type: extracted.policy_type || 'Health Insurance',
-                  product_name: extracted.product_name || 'Individual Health Insurance',
-                  sum_insured: extracted.sum_insured,
-                  premium: extracted.premium,
-                  start_date: extracted.start_date,
-                  renewal_date: extracted.renewal_date,
-                  client_address: extracted.client_address,
-                  policy_holder_type: extracted.policy_holder_type || 'Individual',
-                  mode: extracted.mode || 'Annual',
-                };
-                
-                console.log(`[extract] ✅ United India INDIVIDUAL policy parsed: ${extracted.policy_number}`);
-                console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
-                console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
-                console.log(`[extract]    Product: ${extracted.product_name}`);
-                
-                return NextResponse.json({
-                  filePath: path,
-                  fileName: file.name,
-                  scanned: false,
-                  mode: "schedule",
-                  rows: [policyRow],
-                  registerType: 'unitedindia-individual',
-                  confidence: detection.confidence,
-                  metadata: {
-                    policy_type_detected: extracted.policy_holder_type,
-                    detection_type: detection.type,
-                  },
-                });
-              } catch (parseErr) {
-                console.error('[extract] United India INDIVIDUAL parser failed:', parseErr);
-                throw parseErr; // Let it fall through to generic LLM extraction
-              }
+            try {
+              const extracted = parseUnitedIndiaText(text);
+              
+              const policyRow = {
+                client_name: extracted.client_name,
+                policy_number: extracted.policy_number,
+                previous_policy_number: extracted.previous_policy_number || null,
+                company: extracted.company || 'United India Insurance',
+                policy_type: extracted.policy_type || 'Health Insurance',
+                product_name: extracted.product_name || 'Individual Health Insurance',
+                sum_insured: extracted.sum_insured,
+                premium: extracted.premium,
+                start_date: extracted.start_date,
+                renewal_date: extracted.renewal_date,
+                client_address: extracted.client_address,
+                policy_holder_type: extracted.policy_holder_type || 'Individual',
+                mode: extracted.mode || 'Annual',
+              };
+              
+              console.log(`[extract] ✅ United India INDIVIDUAL policy parsed: ${extracted.policy_number}`);
+              console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
+              console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
+              console.log(`[extract]    Product: ${extracted.product_name}`);
+              
+              return NextResponse.json({
+                filePath: path,
+                fileName: file.name,
+                scanned: false,
+                mode: "schedule",
+                rows: [policyRow],
+                registerType: 'unitedindia-individual',
+                confidence: detection.confidence,
+                metadata: {
+                  policy_type_detected: extracted.policy_holder_type,
+                  detection_type: detection.type,
+                },
+              });
+            } catch (parseErr) {
+              console.error('[extract] United India INDIVIDUAL parser failed:', parseErr);
+              throw parseErr; // Let it fall through to generic LLM extraction
             }
           }
           
           // UNKNOWN TYPE - Try individual parser as fallback
           else {
             console.log('[extract] ⚠️ Unknown United India type, trying INDIVIDUAL parser as fallback');
-            const { parseUnitedIndiaText, isUnitedIndiaPolicy } = await import('@/lib/unitedindia');
+            const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
             
-            if (isUnitedIndiaPolicy(text)) {
-              try {
-                const extracted = parseUnitedIndiaText(text);
-                
-                const policyRow = {
-                  client_name: extracted.client_name,
-                  policy_number: extracted.policy_number,
-                  previous_policy_number: extracted.previous_policy_number || null,
-                  company: extracted.company || 'United India Insurance',
-                  policy_type: extracted.policy_type || 'Health Insurance',
-                  product_name: extracted.product_name || 'Health Insurance Policy',
-                  sum_insured: extracted.sum_insured,
-                  premium: extracted.premium,
-                  start_date: extracted.start_date,
-                  renewal_date: extracted.renewal_date,
-                  client_address: extracted.client_address,
-                  policy_holder_type: extracted.policy_holder_type || 'Individual',
-                  mode: extracted.mode || 'Annual',
-                };
-                
-                console.log(`[extract] ✅ United India policy parsed (fallback): ${extracted.policy_number}`);
-                
-                return NextResponse.json({
-                  filePath: path,
-                  fileName: file.name,
-                  scanned: false,
-                  mode: "schedule",
-                  rows: [policyRow],
-                  registerType: 'unitedindia-schedule',
-                  confidence: 0.7,
-                  metadata: {
-                    policy_type_detected: extracted.policy_holder_type,
-                    detection_type: 'unknown-fallback',
-                  },
-                });
-              } catch (parseErr) {
-                console.error('[extract] United India fallback parser failed:', parseErr);
-                throw parseErr;
-              }
+            try {
+              const extracted = parseUnitedIndiaText(text);
+              
+              const policyRow = {
+                client_name: extracted.client_name,
+                policy_number: extracted.policy_number,
+                previous_policy_number: extracted.previous_policy_number || null,
+                company: extracted.company || 'United India Insurance',
+                policy_type: extracted.policy_type || 'Health Insurance',
+                product_name: extracted.product_name || 'Health Insurance Policy',
+                sum_insured: extracted.sum_insured,
+                premium: extracted.premium,
+                start_date: extracted.start_date,
+                renewal_date: extracted.renewal_date,
+                client_address: extracted.client_address,
+                policy_holder_type: extracted.policy_holder_type || 'Individual',
+                mode: extracted.mode || 'Annual',
+              };
+              
+              console.log(`[extract] ✅ United India policy parsed (fallback): ${extracted.policy_number}`);
+              
+              return NextResponse.json({
+                filePath: path,
+                fileName: file.name,
+                scanned: false,
+                mode: "schedule",
+                rows: [policyRow],
+                registerType: 'unitedindia-schedule',
+                confidence: 0.7,
+                metadata: {
+                  policy_type_detected: extracted.policy_holder_type,
+                  detection_type: 'unknown-fallback',
+                },
+              });
+            } catch (parseErr) {
+              console.error('[extract] United India fallback parser failed:', parseErr);
+              throw parseErr;
             }
           }
         } catch (importErr) {
