@@ -266,11 +266,9 @@ export async function POST(request: NextRequest) {
   
   if (isUnitedIndia) {
     try {
-      console.log('[extract] Detected United India Insurance policy');
       const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
       const extracted = parseUnitedIndiaText(text);
       
-      // Convert to RegisterRow format for matching logic
       const policyRow = {
         client_name: extracted.client_name,
         policy_number: extracted.policy_number,
@@ -286,7 +284,6 @@ export async function POST(request: NextRequest) {
         policy_holder_type: extracted.policy_holder_type,
       };
       
-      // Return as "schedule" mode to trigger match/attach logic
       return NextResponse.json({
         filePath: path,
         fileName: file.name,
@@ -298,7 +295,6 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       console.error('[extract] United India extraction failed:', err);
-      // Fall through to generic extraction
     }
   }
 
