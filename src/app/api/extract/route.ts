@@ -266,6 +266,7 @@ export async function POST(request: NextRequest) {
                          (lowerText.includes("irdai reg") && lowerText.includes("545"));
   
   if (isUnitedIndia) {
+    console.log('[extract] ✅ United India document detected, starting parsing...');
     try {
       // Detect document type (single policy, register, etc.)
       const detection = detectUnitedIndiaDocumentType(text);
