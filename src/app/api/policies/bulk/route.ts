@@ -251,25 +251,20 @@ export async function POST(request: NextRequest) {
   }
 
   // ---- 2. Filter incoming rows: keep every row that is NOT already in the DB.
-  //         We deliberately DO NOT dedup within the file — the register can
-  //         legitimately list the same client/product/premium twice as two
-  //         separate transactions (different Tra IDs), so all such rows are
-  //         imported. Re-uploading still won't double, because any row whose
-  //         composite key already exists in the DB is skipped. ----
-  // Track keys accepted in THIS batch so two identical rows in the same upload
-  // can't both insert (bulletproof in-file dedup, on top of the DB check).
+  //         CRITICAL EXCEPTION: For schedule/renewal rows (with previous_policy_number),
+  //         if they match an existing policy by current OR previous number, SKIP them
+  //         from import but DO attach the PDF. These are renewal documents, not new data. ----
   const batchPolicyNums = new Set<string>();
   const batchDetailSeen = new Set<string>();
   const toImport = valid.filter((r) => {
-    // A schedule/renewal row (carries a previous policy number) whose CURRENT
-    // OR PREVIOUS policy number already exists → DO NOT create a new detail.
-    // We attach the uploaded PDF to that matched existing policy instead (below).
+    // CRITICAL: Schedule/renewal rows (with previous_policy_number) that match existing
+    // policies should NOT be imported - they're just PDFs to attach, not new data
     if (r.previous_policy_number) {
       const cur = normPolicy(r.policy_number);
       const prev = normPolicy(r.previous_policy_number);
       if ((cur && policyByNumber.has(cur)) || (prev && policyByNumber.has(prev))) {
-        console.log('[bulk] Schedule matched existing policy — attaching, not creating:', cur || prev);
-        return false;
+        console.log('[bulk] ⏭️  Schedule matched existing policy — will attach PDF, not create new row:', cur || prev);
+        return false; // Skip from import - we'll attach PDF below
       }
     }
 
@@ -288,27 +283,30 @@ export async function POST(request: NextRequest) {
     // RULE 2 — blank OR new policy number, but every other detail matches an
     // existing/earlier row → still a duplicate. Catches rows with no policy
     // number and re-typed rows whose number changed but details are identical.
-    const dkey = detailKey(
-      r.client_name!,
-      r.company ?? null,
-      r.product_name,
-      r.policy_type,
-      r.premium,
-      r.sum_insured,
-      r.start_date,
-      r.renewal_date
-    );
-    if (existingDetailKeys.has(dkey) || batchDetailSeen.has(dkey)) {
-      console.log('[bulk] Skipping — all other details already exist:', {
-        name: r.client_name,
-        premium: r.premium,
-      });
-      return false;
+    // EXCEPTION: Skip this check for schedule/renewal rows (they're just PDFs to attach)
+    if (!r.previous_policy_number) {
+      const dkey = detailKey(
+        r.client_name!,
+        r.company ?? null,
+        r.product_name,
+        r.policy_type,
+        r.premium,
+        r.sum_insured,
+        r.start_date,
+        r.renewal_date
+      );
+      if (existingDetailKeys.has(dkey) || batchDetailSeen.has(dkey)) {
+        console.log('[bulk] Skipping — all other details already exist:', {
+          name: r.client_name,
+          premium: r.premium,
+        });
+        return false;
+      }
+      batchDetailSeen.add(dkey);
     }
 
     // Accept — record its keys so later rows in this batch dedup against it.
     if (np) batchPolicyNums.add(np);
-    batchDetailSeen.add(dkey);
     return true;
   });
   const duplicates = valid.length - toImport.length;
@@ -370,12 +368,24 @@ export async function POST(request: NextRequest) {
       console.log('[bulk]   Current source_file_path:', target.source_file_path || '(none)');
       
       // CRITICAL: Attach the uploaded PDF to the matched existing policy
+      // AND update the address if it's available in the uploaded row
       if (body.source_file_path) {
         console.log('[bulk]   📎 Attaching PDF:', body.source_file_path);
         
+        // Build update object with PDF path and optionally address
+        const updateData: { source_file_path: string; client_address?: string } = {
+          source_file_path: body.source_file_path,
+        };
+        
+        // If the uploaded row has an address, update the policy with it
+        if (r.client_address && r.client_address.trim()) {
+          updateData.client_address = r.client_address.trim();
+          console.log('[bulk]   📍 Also updating address:', r.client_address.trim());
+        }
+        
         const { error: attachErr, count } = await db
           .from("policies")
-          .update({ source_file_path: body.source_file_path })
+          .update(updateData)
           .eq("id", target.id)
           .eq("agent_id", ownerId)
           .eq("workspace", workspace);
@@ -383,6 +393,9 @@ export async function POST(request: NextRequest) {
         if (!attachErr) {
           attached++;
           console.log('[bulk]   ✅✅✅ PDF ATTACHED SUCCESSFULLY! ✅✅✅');
+          if (updateData.client_address) {
+            console.log('[bulk]   ✅ Address updated on policy card');
+          }
           console.log('[bulk]   Updated rows:', count);
         } else {
           console.error('[bulk]   ❌ FAILED TO ATTACH PDF:');

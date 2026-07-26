@@ -210,44 +210,68 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   // ============================================================
   let sum_insured = 0;
   
-  // Floater policies have ONE sum insured for the entire family
-  // Look in SUMMARY OF COVERAGE section
-  const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,2000}?)(?:PREMIUM BREAK DOWN|PAYMENT DETAILS)/i);
-  if (coverageSection) {
-    // Look for "Sum Insured" followed by amount
-    const sumMatch = coverageSection[1].match(/Sum Insured[^0-9]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
-    if (sumMatch) {
-      sum_insured = parseFloat(sumMatch[1].replace(/,/g, ''));
+  // Pattern 1: Look for "Family Floater SI(₹)" in table format (JHA PDF page 2)
+  let sumMatch = cleanText.match(/Family\s+Floater\s+SI\s*\(?\s*₹?\s*\)?\s*[:.]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+  
+  // Pattern 2: Look in SUMMARY OF COVERAGE section
+  if (!sumMatch) {
+    const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,2000}?)(?:PREMIUM BREAK DOWN|PAYMENT DETAILS)/i);
+    if (coverageSection) {
+      sumMatch = coverageSection[1].match(/Sum Insured[^0-9]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
     }
   }
   
-  // Fallback: Look in policy details section
-  if (sum_insured === 0) {
-    const sumMatch = detailsText.match(/Sum Insured[^0-9]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
-    if (sumMatch) {
-      sum_insured = parseFloat(sumMatch[1].replace(/,/g, ''));
-    }
+  // Pattern 3: Look in policy details section
+  if (!sumMatch) {
+    sumMatch = detailsText.match(/Sum Insured[^0-9]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
   }
   
-  console.log('[United India Floater] Total Sum Insured:', sum_insured);
+  // Pattern 4: Look for any large number that looks like sum insured (500000-10000000 range)
+  if (!sumMatch) {
+    sumMatch = detailsText.match(/\b([5-9]\d{5}|[1-9]\d{6,7})\b/);
+  }
+  
+  if (sumMatch) {
+    sum_insured = parseFloat(sumMatch[1].replace(/,/g, ''));
+  }
+  
+  console.log('[United India Floater] Total Sum Insured extracted:', sum_insured || '❌ NOT FOUND');
   
   // ============================================================
   // STEP 7: Extract Premium (Total)
   // ============================================================
   let premium = 0;
   
-  // Look in PAYMENT DETAILS section for final total
-  const paymentSection = cleanText.match(/PAYMENT DETAILS(.{0,1500})(?:Receipt Number|Receipt Date|INTERMEDIARY)/i);
-  if (paymentSection) {
-    // Get the LAST Total (final amount after all additions)
-    const totalMatches = [...paymentSection[1].matchAll(/Total\s*:?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi)];
-    if (totalMatches.length > 0) {
-      const lastTotal = totalMatches[totalMatches.length - 1];
-      premium = parseFloat(lastTotal[1].replace(/,/g, ''));
+  // Pattern 1: Look for "Premium: ₹" in table format (JHA PDF page 2)
+  let premiumMatch = cleanText.match(/Premium\s*[:.]?\s*₹?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+  
+  // Pattern 2: Look in PAYMENT DETAILS section for final total
+  if (!premiumMatch) {
+    const paymentSection = cleanText.match(/PAYMENT DETAILS(.{0,1500})(?:Receipt Number|Receipt Date|INTERMEDIARY)/i);
+    if (paymentSection) {
+      // Get the LAST Total (final amount after all additions)
+      const totalMatches = [...paymentSection[1].matchAll(/Total\s*:?\s*₹?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi)];
+      if (totalMatches.length > 0) {
+        premiumMatch = totalMatches[totalMatches.length - 1];
+      }
     }
   }
   
-  // Fallback: try to get from Premium Break Down total
+  // Pattern 3: Try to get from Premium Break Down total
+  if (!premiumMatch) {
+    premiumMatch = cleanText.match(/Total Annual Premium[^\d]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+  }
+  
+  // Pattern 4: Look for "Total:" followed by amount in the 10000-100000 range
+  if (!premiumMatch) {
+    premiumMatch = cleanText.match(/Total\s*:?\s*₹?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+  }
+  
+  if (premiumMatch) {
+    premium = parseFloat(premiumMatch[1].replace(/,/g, ''));
+  }
+  
+  console.log('[United India Floater] Total Premium extracted:', premium || '❌ NOT FOUND');
   if (premium === 0) {
     const breakdownMatch = cleanText.match(/Total Annual Premium[^\d]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
     if (breakdownMatch) {
