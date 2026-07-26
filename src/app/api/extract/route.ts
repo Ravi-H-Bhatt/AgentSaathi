@@ -288,6 +288,7 @@ export async function POST(request: NextRequest) {
             try {
               const extracted = parseUnitedIndiaFloaterText(text);
               
+              // CRITICAL: Ensure previous_policy_number is included in the row
               const policyRow = {
                 client_name: extracted.client_name,
                 policy_number: extracted.policy_number,
@@ -304,11 +305,16 @@ export async function POST(request: NextRequest) {
                 mode: extracted.mode || 'Annual',
               };
               
-              console.log(`[extract] ✅ United India FLOATER policy parsed: ${extracted.policy_number}`);
-              console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
+              console.log(`[extract] ✅ United India FLOATER policy parsed successfully`);
+              console.log(`[extract]    Client: ${extracted.client_name}`);
+              console.log(`[extract]    Current Policy: ${extracted.policy_number}`);
               console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
-              console.log(`[extract]    Product: ${extracted.product_name}`);
+              console.log(`[extract]    Premium: ${extracted.premium}`);
+              console.log(`[extract]    Start: ${extracted.start_date} → End: ${extracted.renewal_date}`);
               console.log(`[extract]    Members: ${extracted.members?.length || 0}`);
+              console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
+              console.log(`[extract]    Product: ${extracted.product_name}`);
+              console.log(`[extract] 📄 Will return mode="schedule" for matching/attachment`);
               
               return NextResponse.json({
                 filePath: path,
@@ -325,7 +331,8 @@ export async function POST(request: NextRequest) {
                 },
               });
             } catch (parseErr) {
-              console.error('[extract] United India FLOATER parser failed:', parseErr);
+              console.error('[extract] ❌ United India FLOATER parser failed:', parseErr);
+              console.error('[extract]    Error details:', parseErr instanceof Error ? parseErr.message : String(parseErr));
               throw parseErr; // Let it fall through to generic LLM extraction
             }
           }

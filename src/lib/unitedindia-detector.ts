@@ -36,8 +36,10 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   const uniquePolicies = [...new Set(policyNumbers)];
 
   const details = {
-    hasPolicyDetails: /POLICY\s+(?:DETAILS|NO\.)\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
-    hasPreviousPolicyField: /Previous\s+Policy\s+No\.\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
+    // Match both "POLICY NO. : XXX" and "Policy Number XXX" (with or without colon)
+    hasPolicyDetails: /POLICY\s+(?:DETAILS|NO\.?|Number)\s*:?\s*\d{10}[A-Z]\d{8}|Policy\s+Number\s+\d{10}[A-Z]\d{8}/i.test(text),
+    // Match both "Previous Policy No. : XXX" and "Previous Policy No. XXX" (with or without colon)
+    hasPreviousPolicyField: /Previous\s+Policy\s+No\.?\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
     // Enhanced pattern to catch more floater variations:
     // - "FAMILY MEDICARE POLICY" (JHA PDF)
     // - "Family Floater Basis/SI"
@@ -45,7 +47,7 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
     // - Generic "floater" mention with "family" nearby
     hasFamilyFloaterBasis: /FAMILY\s+MEDICARE\s+POLICY|Family\s+Floater\s+(?:Basis|SI|Policy)|Policy\s+Type\s*:?\s*Family\s+Floater|(?:family|group).*floater|floater.*(?:family|group)/i.test(text),
     // Enhanced pattern to catch insured persons section:
-    hasFamilyMembers: /DETAILS?\s+OF\s+(?:THE\s+)?INSURED\s+(?:PERSONS?|MEMBERS?)|INSURED\s+DETAILS?|Insured\s+Persons?\s+Details?/i.test(text),
+    hasFamilyMembers: /DETAILS?\s+OF\s+(?:THE\s+)?INSURED\s+(?:PERSONS?|MEMBERS?)|INSURED\s+DETAILS?|Insured\s+Persons?\s+Details?|Insured\s+Details/i.test(text),
     policyNumbersFound: uniquePolicies,
   };
 
@@ -109,9 +111,17 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
  */
 export function extractCurrentPolicyNumber(text: string): string | null {
   // Try to find from POLICY DETAILS section first (page 2)
-  const detailsMatch = text.match(
-    /POLICY\s+(?:DETAILS|NO\.)\s*:?\s*([0-9]{10}[A-Z][0-9]{8})/i
+  // Pattern 1: "Policy Number XXXXXXXXXXX" (without colon - JHA format)
+  let detailsMatch = text.match(
+    /Policy\s+Number\s+([0-9]{10}[A-Z][0-9]{8})/i
   );
+  
+  // Pattern 2: "POLICY NO. : XXXXXXXXXXX" (with colon)
+  if (!detailsMatch) {
+    detailsMatch = text.match(
+      /POLICY\s+(?:DETAILS|NO\.)\s*:?\s*([0-9]{10}[A-Z][0-9]{8})/i
+    );
+  }
   
   if (detailsMatch) {
     return detailsMatch[1];
@@ -126,9 +136,18 @@ export function extractCurrentPolicyNumber(text: string): string | null {
  * Extract previous policy number for renewals
  */
 export function extractPreviousPolicyNumber(text: string): string | null {
-  const match = text.match(
-    /Previous\s+Policy\s+No\.\s*:?\s*([0-9]{10}[A-Z][0-9]{8})/i
+  // Pattern 1: "Previous Policy No. XXXXXXXXXXX" (without colon - JHA format)
+  let match = text.match(
+    /Previous\s+Policy\s+No\.\s+([0-9]{10}[A-Z][0-9]{8})/i
   );
+  
+  // Pattern 2: "Previous Policy No. : XXXXXXXXXXX" (with colon)
+  if (!match) {
+    match = text.match(
+      /Previous\s+Policy\s+No\.\s*:?\s*([0-9]{10}[A-Z][0-9]{8})/i
+    );
+  }
+  
   return match ? match[1] : null;
 }
 

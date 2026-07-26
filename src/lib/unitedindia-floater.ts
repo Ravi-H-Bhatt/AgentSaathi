@@ -39,7 +39,10 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   // Clean up text for easier parsing
   const cleanText = text.replace(/\s+/g, ' ').trim();
   
+  console.log('[United India Floater] ========================================');
   console.log('[United India Floater] Starting parse...');
+  console.log('[United India Floater] Text length:', text.length);
+  console.log('[United India Floater] ========================================');
   
   // ============================================================
   // STEP 1: Extract POLICY DETAILS (Page 2)
@@ -56,18 +59,26 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   
   const detailsText = policyDetailsSection ? policyDetailsSection[1] : cleanText;
   
+  console.log('[United India Floater] Policy Details section found:', !!policyDetailsSection);
+  console.log('[United India Floater] Details text length:', detailsText.length);
+  
   // Extract policy number (current) - try multiple patterns
   let policy_number = '';
   
-  // Pattern 1: "Policy No. : XXXXXXXXXXX"
-  let policyNumberMatch = detailsText.match(/Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  // Pattern 1: "Policy Number XXXXXXXXXXX" (NO colon - JHA format on page 2)
+  let policyNumberMatch = detailsText.match(/Policy\s+Number\s+(\d{10}[A-Z]\d{8})/i);
   
-  // Pattern 2: "YOUR POLICY No. XXXXXXXXXXX" (without colon)
+  // Pattern 2: "Policy No. : XXXXXXXXXXX" (with colon and period)
+  if (!policyNumberMatch) {
+    policyNumberMatch = detailsText.match(/Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  }
+  
+  // Pattern 3: "YOUR POLICY No. XXXXXXXXXXX" (without colon)
   if (!policyNumberMatch) {
     policyNumberMatch = detailsText.match(/YOUR\s+POLICY\s+No\.?\s*(\d+[A-Z]\d+)/i);
   }
   
-  // Pattern 3: Just search for policy number pattern in details section
+  // Pattern 4: Just search for policy number pattern in details section
   if (!policyNumberMatch) {
     policyNumberMatch = detailsText.match(/\b(0605002\d{3}[A-Z]\d{8})\b/);
   }
@@ -76,20 +87,25 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
     policy_number = policyNumberMatch[1];
   }
   
-  console.log('[United India Floater] Policy Number:', policy_number);
+  console.log('[United India Floater] Policy Number extracted:', policy_number || '❌ NOT FOUND');
   
   // Extract previous policy number - try multiple patterns
   let previous_policy_number: string | null = null;
   
-  // Pattern 1: "Previous Policy No. : XXXXXXXXXXX"
-  let prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  // Pattern 1: "Previous Policy No. XXXXXXXXXXX" (NO colon - JHA format)
+  let prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s+(\d{10}[A-Z]\d{8})/i);
   
-  // Pattern 2: "Prev. Policy No. : XXXXXXXXXXX"
+  // Pattern 2: "Previous Policy No. : XXXXXXXXXXX" (with colon)
+  if (!prevPolicyMatch) {
+    prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s*:\s*(\d+[A-Z]\d+)/i);
+  }
+  
+  // Pattern 3: "Prev. Policy No. : XXXXXXXXXXX"
   if (!prevPolicyMatch) {
     prevPolicyMatch = detailsText.match(/Prev\.?\s+Policy\s+No\.?\s*:?\s*(\d+[A-Z]\d+)/i);
   }
   
-  // Pattern 3: "Renewed from : XXXXXXXXXXX"
+  // Pattern 4: "Renewed from : XXXXXXXXXXX"
   if (!prevPolicyMatch) {
     prevPolicyMatch = detailsText.match(/Renewed\s+from\s*:?\s*(\d+[A-Z]\d+)/i);
   }
@@ -98,13 +114,25 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
     previous_policy_number = prevPolicyMatch[1];
   }
   
-  console.log('[United India Floater] Previous Policy Number:', previous_policy_number);
+  console.log('[United India Floater] Previous Policy Number extracted:', previous_policy_number || '(none)');
   
   // ============================================================
   // STEP 2: Extract Policyholder Name
   // ============================================================
   let client_name = '';
-  const nameMatch = cleanText.match(/Policyholder Name\s*:?\s*([A-Z][A-Z\s.]+?)(?:\s+Policyholder ID|\s+Address|\s+AHMADABAD|\s+Tel|$)/i);
+  // Try to extract from "Name/ID of Policyholder" section (page 2 table format)
+  let nameMatch = cleanText.match(/Name\/ID\s+of\s+Policyholder\s+([A-Z][A-Z\s.]+?)\s*\/\d+/i);
+  
+  // Fallback: Try standard "Policyholder Name" format
+  if (!nameMatch) {
+    nameMatch = cleanText.match(/Policyholder\s+Name\s*:?\s*([A-Z][A-Z\s.]+?)(?:\s+Policyholder ID|\s+Address|\s+AHMADABAD|\s+Tel|$)/i);
+  }
+  
+  // Fallback: Try "Policyholder" label followed by name on page 1
+  if (!nameMatch) {
+    nameMatch = cleanText.match(/Policyholder\s+([A-Z][A-Z\s.]+?)(?:\s+A\/\d|\s+AHMADABAD|\s+AHMEDABAD|$)/i);
+  }
+  
   if (nameMatch) {
     client_name = nameMatch[1]
       .replace(/^(MR|MRS|MS|DR)\.?\s+(MR|MRS|MS|DR)\.?\s+/i, '')
@@ -114,7 +142,7 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
       .replace(/\.$/, '');
   }
   
-  console.log('[United India Floater] Client Name:', client_name);
+  console.log('[United India Floater] Client Name extracted:', client_name || '❌ NOT FOUND');
   
   // ============================================================
   // STEP 3: Extract Product Name (Floater Mediclaim)
@@ -141,17 +169,19 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   let renewal_date = '';
   
   // Try multiple patterns to catch different date formats
-  let periodMatch = cleanText.match(/Period of Insurance\s*:?\s*From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?(\d{2}\/\d{2}\/\d{4})/i);
+  // Pattern 1: "Period Of Insurance From 00:00hrs of DD/MM/YYYY To Midnight on DD/MM/YYYY" (JHA format)
+  let periodMatch = cleanText.match(/Period\s+[Oo]f\s+Insurance\s+From\s+(?:00:00\s*hrs?\s+(?:of|on)\s+)?(\d{2}\/\d{2}\/\d{4})[^T]*?To\s+(?:Midnight\s+on\s+)?(\d{2}\/\d{2}\/\d{4})/i);
+  
+  // Pattern 2: Generic "From ... To ..." with optional time descriptors
+  if (!periodMatch) {
+    periodMatch = cleanText.match(/From\s+(?:00:00\s*[Hh]rs?\s+(?:of|on)\s+)?(\d{2}\/\d{2}\/\d{4})[^T]*?To\s+(?:(?:Midnight|MIDNIGHT)\s+on\s+)?(\d{2}\/\d{2}\/\d{4})/i);
+  }
+  
+  // Pattern 3: Simple Period format
   if (!periodMatch) {
     periodMatch = cleanText.match(/Period\s*:?\s*From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?(\d{2}\/\d{2}\/\d{4})/i);
   }
-  if (!periodMatch) {
-    periodMatch = cleanText.match(/From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?on\s*(\d{2}\/\d{2}\/\d{4})/i);
-  }
-  if (!periodMatch) {
-    // Try alternative: From 00:00 hrs of DD/MM/YYYY To Midnight on DD/MM/YYYY
-    periodMatch = cleanText.match(/From\s+(?:00:00\s+hrs?\s+of\s+)?(\d{2}\/\d{2}\/\d{4})[^T]*?To\s+(?:Midnight\s+on\s+)?(\d{2}\/\d{2}\/\d{4})/i);
-  }
+  
   if (periodMatch) {
     start_date = periodMatch[1];
     renewal_date = periodMatch[2];
@@ -288,15 +318,34 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   // ============================================================
   // STEP 9: Validate Required Fields
   // ============================================================
+  console.log('[United India Floater] ========================================');
+  console.log('[United India Floater] VALIDATION:');
+  console.log('[United India Floater]   Client Name:', client_name ? '✅' : '❌ MISSING');
+  console.log('[United India Floater]   Policy Number:', policy_number ? '✅' : '❌ MISSING');
+  console.log('[United India Floater]   Previous Policy:', previous_policy_number || '(none)');
+  console.log('[United India Floater]   Premium:', premium);
+  console.log('[United India Floater]   Sum Insured:', sum_insured);
+  console.log('[United India Floater]   Dates:', start_date, '→', renewal_date);
+  console.log('[United India Floater]   Members:', members.length);
+  console.log('[United India Floater] ========================================');
+  
   if (!client_name || !policy_number) {
-    throw new Error("Could not extract required fields: client_name and policy_number");
+    const missingFields = [];
+    if (!client_name) missingFields.push('client_name');
+    if (!policy_number) missingFields.push('policy_number');
+    
+    console.error('[United India Floater] ❌ EXTRACTION FAILED - Missing required fields:', missingFields.join(', '));
+    throw new Error(`Could not extract required fields: ${missingFields.join(', ')}`);
   }
   
   if (members.length === 0) {
-    console.warn('[United India Floater] WARNING: No family members extracted!');
+    console.warn('[United India Floater] ⚠️  WARNING: No family members extracted!');
   }
   
-  return {
+  console.log('[United India Floater] ✅ EXTRACTION SUCCESSFUL');
+  console.log('[United India Floater] ========================================');
+  
+  const result = {
     client_name,
     policy_number,
     previous_policy_number,
@@ -311,6 +360,16 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
     policy_holder_type: "Floater",
     members,
   };
+  
+  console.log('[United India Floater] 📤 RETURNING EXTRACTION RESULT:');
+  console.log('[United India Floater]   Client:', result.client_name);
+  console.log('[United India Floater]   Current Policy:', result.policy_number);
+  console.log('[United India Floater]   Previous Policy:', result.previous_policy_number || '(none)');
+  console.log('[United India Floater]   Premium:', result.premium);
+  console.log('[United India Floater]   Members:', result.members.length);
+  console.log('[United India Floater] ========================================');
+  
+  return result;
 }
 
 /**

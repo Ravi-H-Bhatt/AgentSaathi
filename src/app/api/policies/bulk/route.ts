@@ -294,60 +294,94 @@ export async function POST(request: NextRequest) {
   // ---- Match & document attach (individual policy schedules) ----
   // For a schedule/renewal document (a row carrying a previous policy number):
   //   • "match found" if its CURRENT or PREVIOUS number already exists in the DB.
-  //   • If the CURRENT policy is already stored, attach THIS uploaded PDF to that
-  //     existing policy so clicking "View" on its card opens this document
-  //     (instead of showing nothing / the register it came from).
+  //   • Attach THIS uploaded PDF to the matched existing policy so clicking "View"
+  //     on its card opens this document.
   // Registers never set previous_policy_number, so this can't affect them.
   let attached = 0;
   let matched = false;
   let matchedClientName: string | null = null;
   let matchedPolicyNumber: string | null = null;
   
-  console.log('[bulk] Checking for policy matches...');
+  console.log('[bulk] =====================================');
+  console.log('[bulk] SCHEDULE MODE: Checking for policy matches...');
+  console.log('[bulk] Valid rows to check:', valid.length);
+  
   for (const r of valid) {
-    if (!r.previous_policy_number) continue;
+    // CRITICAL: Only process rows with previous_policy_number (schedule/renewal PDFs)
+    if (!r.previous_policy_number) {
+      console.log('[bulk] ⏭️  Skipping row (no previous policy number):', r.client_name);
+      continue;
+    }
+    
     const cur = normPolicy(r.policy_number);
     const prev = normPolicy(r.previous_policy_number);
-    console.log('[bulk] Checking renewal row:', {
-      client_name: r.client_name,
-      policy_number: r.policy_number,
-      normalized_current: cur,
-      previous_policy_number: r.previous_policy_number,
-      normalized_previous: prev,
-    });
+    
+    console.log('[bulk] =====================================');
+    console.log('[bulk] 🔍 RENEWAL ROW:');
+    console.log('[bulk]   Client:', r.client_name);
+    console.log('[bulk]   Current Policy:', r.policy_number, '→ normalized:', cur);
+    console.log('[bulk]   Previous Policy:', r.previous_policy_number, '→ normalized:', prev);
+    
+    // Try to match by CURRENT policy number first (renewal uploaded after policy already exists)
     const curMatch = cur ? policyByNumber.get(cur) : undefined;
+    console.log('[bulk]   Match by CURRENT:', curMatch ? `✅ FOUND (policy id: ${curMatch.id})` : '❌ not found');
+    
+    // Try to match by PREVIOUS policy number (renewal PDF before new policy is in system)
     const prevMatch = prev ? policyByNumber.get(prev) : undefined;
-    console.log('[bulk]   Current match:', curMatch ? `✅ Found (id: ${curMatch.id})` : '❌ Not found');
-    console.log('[bulk]   Previous match:', prevMatch ? `✅ Found (id: ${prevMatch.id})` : '❌ Not found');
+    console.log('[bulk]   Match by PREVIOUS:', prevMatch ? `✅ FOUND (policy id: ${prevMatch.id})` : '❌ not found');
+    
+    // CRITICAL: Current match wins (if both exist, attach to the current policy)
     const target = curMatch || prevMatch;
+    
     if (target) {
       matched = true;
       matchedClientName = clientNameById.get(target.client_id) || matchedClientName;
-      matchedPolicyNumber =
-        matchedPolicyNumber ||
-        r.policy_number?.toString().trim() ||
-        r.previous_policy_number?.toString().trim() ||
-        null;
-      console.log('[bulk] ✅ Match found! Client:', matchedClientName, 'Policy:', matchedPolicyNumber);
-    }
-    // Attach the uploaded PDF to the matched existing policy (current match wins,
-    // else the previous/renewed one) so its "View" opens this full document.
-    if (body.source_file_path && target) {
-      console.log('[bulk] Attaching PDF to policy:', target.id);
-      const { error: attachErr } = await db
-        .from("policies")
-        .update({ source_file_path: body.source_file_path })
-        .eq("id", target.id)
-        .eq("agent_id", ownerId)
-        .eq("workspace", workspace);
-      if (!attachErr) {
-        attached++;
-        console.log('[bulk] ✅ PDF attached successfully');
+      matchedPolicyNumber = cur || prev || null;
+      
+      console.log('[bulk] =====================================');
+      console.log('[bulk] ✅✅✅ MATCH FOUND! ✅✅✅');
+      console.log('[bulk]   Target Policy ID:', target.id);
+      console.log('[bulk]   Client Name:', matchedClientName);
+      console.log('[bulk]   Policy Number:', matchedPolicyNumber);
+      console.log('[bulk]   Current source_file_path:', target.source_file_path || '(none)');
+      
+      // CRITICAL: Attach the uploaded PDF to the matched existing policy
+      if (body.source_file_path) {
+        console.log('[bulk]   📎 Attaching PDF:', body.source_file_path);
+        
+        const { error: attachErr, count } = await db
+          .from("policies")
+          .update({ source_file_path: body.source_file_path })
+          .eq("id", target.id)
+          .eq("agent_id", ownerId)
+          .eq("workspace", workspace);
+        
+        if (!attachErr) {
+          attached++;
+          console.log('[bulk]   ✅✅✅ PDF ATTACHED SUCCESSFULLY! ✅✅✅');
+          console.log('[bulk]   Updated rows:', count);
+        } else {
+          console.error('[bulk]   ❌ FAILED TO ATTACH PDF:');
+          console.error('[bulk]   Error code:', attachErr.code);
+          console.error('[bulk]   Error message:', attachErr.message);
+          console.error('[bulk]   Error details:', attachErr.details);
+        }
       } else {
-        console.error('[bulk] ❌ Failed to attach PDF:', attachErr.message);
+        console.warn('[bulk]   ⚠️  No source_file_path provided - cannot attach PDF');
       }
+    } else {
+      console.log('[bulk]   ❌ NO MATCH - will create new policy if imported');
     }
+    console.log('[bulk] =====================================');
   }
+  
+  console.log('[bulk] =====================================');
+  console.log('[bulk] MATCHING SUMMARY:');
+  console.log('[bulk]   Matched:', matched);
+  console.log('[bulk]   Attached:', attached);
+  console.log('[bulk]   Client:', matchedClientName || '(none)');
+  console.log('[bulk]   Policy:', matchedPolicyNumber || '(none)');
+  console.log('[bulk] =====================================');
 
   if (toImport.length === 0) {
     return NextResponse.json({
