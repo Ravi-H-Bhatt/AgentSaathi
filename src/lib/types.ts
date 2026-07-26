@@ -103,6 +103,13 @@ export interface Policy {
   /** Data partition this policy belongs to ("home" | "lic"). */
   workspace: string;
   created_at: string;
+  
+  // Motor policy specific fields
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  registration_number: string | null;
+  year_of_registration: number | null;
+  cubic_capacity: number | null;
 }
 
 /**

@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check, Pencil, MessageCircle } from "lucide-react";
+import { Download, Mail, TrendingUp, Phone, AtSign, FileText, Eye, Trash2, Loader2, Send, Check, Pencil, MessageCircle, Edit, AlertCircle } from "lucide-react";
 import { money, shortDate, companyLabel, getAdjustedRenewalDate } from "@/lib/format";
 import { getLicNextDueISO } from "@/lib/lic-renewal";
 import type { ClientWithPolicies, Policy } from "@/lib/types";
 import type { PremiumProjection } from "@/lib/premium";
 import { downloadClientPdf } from "@/lib/clientPdf";
+import { isMotorPolicy, needsMotorDataEntry } from "@/lib/motor-policy";
+import { MotorPolicyEditor } from "./MotorPolicyEditor";
 
 /**
  * Canonical 10-digit Indian mobile from any stored/typed value, or null if it
@@ -137,6 +139,7 @@ export function ClientDetail({
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(
     null
   );
+  const [editingMotorPolicy, setEditingMotorPolicy] = useState<Policy | null>(null);
 
   // Inline mobile-number entry/editing.
   //  - No phone on file      → can ADD a number.
@@ -641,6 +644,28 @@ export function ClientDetail({
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
+                      {/* Motor Policy Edit Button - shown for motor policies with missing data */}
+                      {isMotorPolicy(p.policy_type) && needsMotorDataEntry(p) && (
+                        <button
+                          onClick={() => setEditingMotorPolicy(p)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition"
+                          title="Complete motor policy details"
+                        >
+                          <AlertCircle size={14} />
+                          Complete Details
+                        </button>
+                      )}
+                      {/* Motor Policy Edit Button - for complete motor policies */}
+                      {isMotorPolicy(p.policy_type) && !needsMotorDataEntry(p) && (
+                        <button
+                          onClick={() => setEditingMotorPolicy(p)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition"
+                          title="Edit motor policy details"
+                        >
+                          <Edit size={14} />
+                          Edit Details
+                        </button>
+                      )}
                       {p.source_file_path && (
                         <>
                           <button
@@ -737,20 +762,43 @@ export function ClientDetail({
                       <Field label="Next due" value={shortDate(licNextDue)} />
                     </dl>
                   ) : (
-                    <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
-                      <Field label="Sum insured" value={money(p.sum_insured)} />
-                      <Field
-                        label="Premium"
-                        value={
-                          money(p.premium) + (p.mode ? ` (${p.mode})` : "")
-                        }
-                      />
-                      <Field label="Start" value={shortDate(p.start_date)} />
-                      <Field label="Renewal" value={shortDate(p.renewal_date)} />
-                      {p.policy_holder_type && (
-                        <Field label="Insured Type" value={p.policy_holder_type} />
+                    <>
+                      <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 text-sm">
+                        <Field label="Sum insured" value={money(p.sum_insured)} />
+                        <Field
+                          label="Premium"
+                          value={
+                            money(p.premium) + (p.mode ? ` (${p.mode})` : "")
+                          }
+                        />
+                        <Field label="Start" value={shortDate(p.start_date)} />
+                        <Field label="Renewal" value={shortDate(p.renewal_date)} />
+                        {p.policy_holder_type && (
+                          <Field label="Insured Type" value={p.policy_holder_type} />
+                        )}
+                      </dl>
+                      
+                      {/* Motor Policy Specific Fields */}
+                      {isMotorPolicy(p.policy_type) && (
+                        <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-3 pt-3 border-t border-border text-sm">
+                          {p.vehicle_make && (
+                            <Field label="Make" value={p.vehicle_make} />
+                          )}
+                          {p.vehicle_model && (
+                            <Field label="Model" value={p.vehicle_model} />
+                          )}
+                          {p.registration_number && (
+                            <Field label="Registration No." value={p.registration_number} />
+                          )}
+                          {p.year_of_registration && (
+                            <Field label="Year of Registration" value={p.year_of_registration.toString()} />
+                          )}
+                          {p.cubic_capacity && (
+                            <Field label="Cubic Capacity" value={`${p.cubic_capacity} cc`} />
+                          )}
+                        </dl>
                       )}
-                    </dl>
+                    </>
                   )}
                   {p.client_address && (
                     <div className="mt-3 pt-3 border-t border-border">
@@ -764,6 +812,19 @@ export function ClientDetail({
           </div>
         )}
       </div>
+      
+      {/* Motor Policy Editor Modal */}
+      {editingMotorPolicy && (
+        <MotorPolicyEditor
+          policy={editingMotorPolicy}
+          clientName={client.full_name}
+          onClose={() => setEditingMotorPolicy(null)}
+          onUpdate={() => {
+            setEditingMotorPolicy(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
