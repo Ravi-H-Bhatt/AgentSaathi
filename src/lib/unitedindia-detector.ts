@@ -8,10 +8,12 @@
  */
 
 export type UnitedIndiaDocumentType = 
-  | 'family-floater-policy'      // Single family policy with previous policy number
+  | 'family-floater-policy'      // Single family policy with previous policy number (renewal PDF)
   | 'individual-policy'           // Single individual policy
   | 'premium-register'            // Bulk register with multiple policies
   | 'unknown';
+
+console.log('[detector] Loaded unitedindia-detector.ts');
 
 export interface DetectionResult {
   type: UnitedIndiaDocumentType;
@@ -36,23 +38,26 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   const uniquePolicies = [...new Set(policyNumbers)];
 
   const details = {
-    // Match both "POLICY NO. : XXX" and "Policy Number XXX" (with or without colon)
-    hasPolicyDetails: /POLICY\s+(?:DETAILS|NO\.?|Number)\s*:?\s*\d{10}[A-Z]\d{8}|Policy\s+Number\s+\d{10}[A-Z]\d{8}/i.test(text),
-    // Match both "Previous Policy No. : XXX" and "Previous Policy No. XXX" (with or without colon)
-    hasPreviousPolicyField: /Previous\s+Policy\s+No\.?\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
-    // Enhanced pattern to catch more floater variations:
-    // - "FAMILY MEDICARE POLICY" (JHA PDF)
-    // - "Family Floater Basis/SI"
-    // - "Policy Type Family Floater"
-    // - Generic "floater" mention with "family" nearby
+    // Match "Policy Number XXXXX" (space-separated, no colon)
+    hasPolicyDetails: /Policy\s+Number\s+\d{10}[A-Z]\d{8}|POLICY\s+(?:DETAILS|NO\.?)\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
+    // Match "Previous Policy No. XXXXX" (space-separated, no colon) - THIS IS KEY FOR JHA PDF
+    hasPreviousPolicyField: /Previous\s+Policy\s+No\.\s+\d{10}[A-Z]\d{8}|Previous\s+Policy\s+No\.?\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
+    // Family Medicare Policy / Family Floater indicators
     hasFamilyFloaterBasis: /FAMILY\s+MEDICARE\s+POLICY|Family\s+Floater\s+(?:Basis|SI|Policy)|Policy\s+Type\s*:?\s*Family\s+Floater|(?:family|group).*floater|floater.*(?:family|group)/i.test(text),
-    // Enhanced pattern to catch insured persons section:
+    // Look for insured members/details section
     hasFamilyMembers: /DETAILS?\s+OF\s+(?:THE\s+)?INSURED\s+(?:PERSONS?|MEMBERS?)|INSURED\s+DETAILS?|Insured\s+Persons?\s+Details?|Insured\s+Details/i.test(text),
     policyNumbersFound: uniquePolicies,
   };
 
+  console.log('[detector] Detection attributes:', {
+    hasPolicyDetails: details.hasPolicyDetails,
+    hasPreviousPolicyField: details.hasPreviousPolicyField,
+    hasFamilyFloaterBasis: details.hasFamilyFloaterBasis,
+    hasFamilyMembers: details.hasFamilyMembers,
+    policyCount: uniquePolicies.length,
+  });
+
   // === PREMIUM REGISTER ===
-  // Multiple policies in table format
   if (lower.includes('premium register') && uniquePolicies.length >= 10) {
     return {
       type: 'premium-register',
@@ -64,13 +69,13 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   }
 
   // === FAMILY FLOATER POLICY ===
-  // Single policy with family members and previous policy number
-  // Note: History table (page 5) may list multiple old policy numbers
+  // CRITICAL: This is the JHA PDF case - has family members, previous policy, and family floater basis
   if (
     details.hasPolicyDetails &&
     details.hasPreviousPolicyField &&
     (details.hasFamilyFloaterBasis || details.hasFamilyMembers)
   ) {
+    console.log('[detector] ✅ DETECTED: FAMILY-FLOATER-POLICY (renewal)');
     return {
       type: 'family-floater-policy',
       confidence: 0.95,
@@ -81,12 +86,12 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   }
 
   // === INDIVIDUAL POLICY ===
-  // Single policy document (no family members, no previous policy)
   if (
     details.hasPolicyDetails &&
     !details.hasFamilyMembers &&
     uniquePolicies.length === 1
   ) {
+    console.log('[detector] ✅ DETECTED: INDIVIDUAL-POLICY');
     return {
       type: 'individual-policy',
       confidence: 0.9,
@@ -97,6 +102,7 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   }
 
   // === FALLBACK ===
+  console.log('[detector] ⚠️ UNKNOWN type');
   return {
     type: 'unknown',
     confidence: 0,

@@ -62,59 +62,67 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   console.log('[United India Floater] Policy Details section found:', !!policyDetailsSection);
   console.log('[United India Floater] Details text length:', detailsText.length);
   
-  // Extract policy number (current) - try multiple patterns
+  // Extract current policy number - try multiple patterns
   let policy_number = '';
   
-  // Pattern 1: "Policy Number XXXXXXXXXXX" (NO colon - JHA format on page 2)
+  // Pattern 1: "Policy Number 0605002826P103732995" (space-separated, no colon - JHA PDF page 2)
   let policyNumberMatch = detailsText.match(/Policy\s+Number\s+(\d{10}[A-Z]\d{8})/i);
+  console.log('[United India Floater] Pattern 1 (Policy Number XXXXX):', policyNumberMatch ? policyNumberMatch[1] : 'no match');
   
-  // Pattern 2: "Policy No. : XXXXXXXXXXX" (with colon and period)
+  // Pattern 2: "POLICY NO. : XXXXXXXXXXX" (with colon and period)
   if (!policyNumberMatch) {
-    policyNumberMatch = detailsText.match(/Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+    policyNumberMatch = detailsText.match(/POLICY\s+(?:DETAILS|NO\.)\s*:?\s*(\d+[A-Z]\d+)/i);
+    console.log('[United India Floater] Pattern 2 (POLICY NO.):', policyNumberMatch ? policyNumberMatch[1] : 'no match');
   }
   
   // Pattern 3: "YOUR POLICY No. XXXXXXXXXXX" (without colon)
   if (!policyNumberMatch) {
     policyNumberMatch = detailsText.match(/YOUR\s+POLICY\s+No\.?\s*(\d+[A-Z]\d+)/i);
+    console.log('[United India Floater] Pattern 3 (YOUR POLICY No.):', policyNumberMatch ? policyNumberMatch[1] : 'no match');
   }
   
-  // Pattern 4: Just search for policy number pattern in details section
+  // Pattern 4: Just find any policy number
   if (!policyNumberMatch) {
     policyNumberMatch = detailsText.match(/\b(0605002\d{3}[A-Z]\d{8})\b/);
+    console.log('[United India Floater] Pattern 4 (any policy number):', policyNumberMatch ? policyNumberMatch[1] : 'no match');
   }
   
   if (policyNumberMatch) {
     policy_number = policyNumberMatch[1];
   }
   
-  console.log('[United India Floater] Policy Number extracted:', policy_number || '❌ NOT FOUND');
+  console.log('[United India Floater] 🔍 Current Policy Number FINAL:', policy_number || '❌ NOT FOUND');
   
   // Extract previous policy number - try multiple patterns
   let previous_policy_number: string | null = null;
   
-  // Pattern 1: "Previous Policy No. XXXXXXXXXXX" (NO colon - JHA format)
+  // Pattern 1: "Previous Policy No. 0605002825P103964712" (space-separated, no colon - JHA format page 2)
   let prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s+(\d{10}[A-Z]\d{8})/i);
+  console.log('[United India Floater] Pattern 1 (Previous Policy No. XXXXX):', prevPolicyMatch ? prevPolicyMatch[1] : 'no match');
   
   // Pattern 2: "Previous Policy No. : XXXXXXXXXXX" (with colon)
   if (!prevPolicyMatch) {
     prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s*:\s*(\d+[A-Z]\d+)/i);
+    console.log('[United India Floater] Pattern 2 (Previous Policy No. :):', prevPolicyMatch ? prevPolicyMatch[1] : 'no match');
   }
   
   // Pattern 3: "Prev. Policy No. : XXXXXXXXXXX"
   if (!prevPolicyMatch) {
     prevPolicyMatch = detailsText.match(/Prev\.?\s+Policy\s+No\.?\s*:?\s*(\d+[A-Z]\d+)/i);
+    console.log('[United India Floater] Pattern 3 (Prev. Policy No.):', prevPolicyMatch ? prevPolicyMatch[1] : 'no match');
   }
   
   // Pattern 4: "Renewed from : XXXXXXXXXXX"
   if (!prevPolicyMatch) {
     prevPolicyMatch = detailsText.match(/Renewed\s+from\s*:?\s*(\d+[A-Z]\d+)/i);
+    console.log('[United India Floater] Pattern 4 (Renewed from):', prevPolicyMatch ? prevPolicyMatch[1] : 'no match');
   }
   
   if (prevPolicyMatch) {
     previous_policy_number = prevPolicyMatch[1];
   }
   
-  console.log('[United India Floater] Previous Policy Number extracted:', previous_policy_number || '(none)');
+  console.log('[United India Floater] 🔍 Previous Policy Number FINAL:', previous_policy_number || '(none)');
   
   // ============================================================
   // STEP 2: Extract Policyholder Name

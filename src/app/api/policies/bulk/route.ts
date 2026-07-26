@@ -327,6 +327,12 @@ export async function POST(request: NextRequest) {
   console.log('[bulk] =====================================');
   console.log('[bulk] SCHEDULE MODE: Checking for policy matches...');
   console.log('[bulk] Valid rows to check:', valid.length);
+  console.log('[bulk] Total policies in policyByNumber map:', policyByNumber.size);
+  console.log('[bulk] policyByNumber keys (first 10):', Array.from(policyByNumber.keys()).slice(0, 10));
+  console.log('[bulk] Sample existing policies:');
+  Array.from(policyByNumber.entries()).slice(0, 3).forEach(([key, val]) => {
+    console.log(`[bulk]   ${key} → policy_id: ${val.id}, client_id: ${val.client_id}`);
+  });
   
   for (const r of valid) {
     // CRITICAL: Only process rows with previous_policy_number (schedule/renewal PDFs)
@@ -334,6 +340,8 @@ export async function POST(request: NextRequest) {
       console.log('[bulk] ⏭️  Skipping row (no previous policy number):', r.client_name);
       continue;
     }
+    
+    console.log('[bulk] DEBUG: Row has previous_policy_number:', r.previous_policy_number);
     
     const cur = normPolicy(r.policy_number);
     const prev = normPolicy(r.previous_policy_number);

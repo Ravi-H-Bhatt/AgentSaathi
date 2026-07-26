@@ -318,6 +318,17 @@ export async function POST(request: NextRequest) {
               console.log(`[extract]    Product: ${extracted.product_name}`);
               console.log(`[extract] 📄 Will return mode="schedule" for matching/attachment`);
               
+              console.log('[extract] 📤 RESPONSE PAYLOAD:');
+              console.log('[extract]   mode: "schedule"');
+              console.log('[extract]   rows[0]:', JSON.stringify({
+                client_name: policyRow.client_name,
+                policy_number: policyRow.policy_number,
+                previous_policy_number: policyRow.previous_policy_number,
+                company: policyRow.company,
+                premium: policyRow.premium,
+                sum_insured: policyRow.sum_insured,
+              }, null, 2));
+              
               return NextResponse.json({
                 filePath: path,
                 fileName: file.name,
