@@ -57,11 +57,11 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
 
   // === FAMILY FLOATER POLICY ===
   // Single policy with family members and previous policy number
+  // Note: History table (page 5) may list multiple old policy numbers
   if (
     details.hasPolicyDetails &&
     details.hasPreviousPolicyField &&
-    (details.hasFamilyFloaterBasis || details.hasFamilyMembers) &&
-    uniquePolicies.length <= 3 // Only current + previous numbers, maybe in history
+    (details.hasFamilyFloaterBasis || details.hasFamilyMembers)
   ) {
     return {
       type: 'family-floater-policy',
