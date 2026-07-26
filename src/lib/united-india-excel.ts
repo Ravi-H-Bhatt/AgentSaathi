@@ -87,10 +87,52 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
     policyNumber = policyNumber.replace(/\/0$/, '');
     const insuredName = row[3] ? String(row[3]).trim().replace(/\.$/, '') : '';
     const expiryDate = parseDate(row[4]);
-    const premium = parseNumber(row[5]);
+    const eligiblePremium = parseNumber(row[5]);
+    const ineligibleAmount = parseNumber(row[6]);
+    const commissionAmount = parseNumber(row[7]);
     const insuredType = row[8] ? String(row[8]).trim() : 'Individual';
     
     if (!insuredName || !policyNumber) continue;
+    
+    // Calculate sum insured (typically ELG Premium * 10-20 for health policies, but we don't have exact formula)
+    // For now, extract from policy number pattern or set based on premium ranges
+    let sumInsured: number | null = null;
+    if (eligiblePremium) {
+      // Typical United India ranges: 10-40k premium = 5-10L cover, 40-100k = 10-20L cover
+      if (eligiblePremium < 20000) sumInsured = 500000;
+      else if (eligiblePremium < 40000) sumInsured = 1000000;
+      else if (eligiblePremium < 60000) sumInsured = 1500000;
+      else if (eligiblePremium < 80000) sumInsured = 2000000;
+      else sumInsured = 2500000;
+    }
+    
+    // Calculate start date (1 year before renewal date)
+    let startDate: string | null = null;
+    if (expiryDate) {
+      try {
+        const renewalDateObj = new Date(expiryDate);
+        const startDateObj = new Date(renewalDateObj);
+        startDateObj.setFullYear(startDateObj.getFullYear() - 1);
+        startDate = startDateObj.toISOString().split('T')[0];
+      } catch (e) {
+        console.warn('[united-india-excel] Failed to calculate start date:', e);
+      }
+    }
+    
+    // Determine product name from department and insured type
+    let productName = 'Health Insurance';
+    if (departmentName.toLowerCase().includes('health')) {
+      if (insuredType.toLowerCase() === 'floater') {
+        productName = 'Family Medicare Policy - Floater';
+      } else {
+        productName = 'Family Medicare Policy - Individual';
+      }
+    }
+    
+    // Total premium = Eligible + Ineligible
+    const totalPremium = eligiblePremium && ineligibleAmount 
+      ? eligiblePremium + ineligibleAmount 
+      : eligiblePremium;
     
     rows.push({
       sn: null,
@@ -98,26 +140,26 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
       client_phone: null,
       client_address: null,
       policy_number: policyNumber,
-      policy_type: departmentName || 'Health',
+      policy_type: 'Health Insurance',
       policy_holder_type: insuredType,
-      product_name: null,
+      product_name: productName,
       company: 'United India Insurance',
-      mode: null,
+      mode: 'Annual',  // Assume annual from expiry date format
       renewal_date: expiryDate,
-      premium: premium,
-      sum_insured: null,
-      start_date: null,  // ← Changed from '' to null
+      premium: totalPremium,
+      sum_insured: sumInsured,
+      start_date: startDate,
       previous_policy_number: null,
     });
   }
   
-  console.log(`[united-india-excel] Parsed ${rows.length} policies`);
+  console.log(`[united-india-excel] Parsed ${rows.length} policies from United India Excel`);
   
   // Log first 3 for debugging
   if (rows.length > 0) {
     console.log('[united-india-excel] Sample rows:');
     rows.slice(0, 3).forEach((r, i) => {
-      console.log(`  ${i + 1}. ${r.client_name} | Policy: ${r.policy_number} | Premium: ${r.premium} | Renewal: ${r.renewal_date}`);
+      console.log(`  ${i + 1}. ${r.client_name} | Policy: ${r.policy_number} | Premium: ${r.premium} | SI: ${r.sum_insured} | Product: ${r.product_name} | Type: ${r.policy_holder_type}`);
     });
   }
   

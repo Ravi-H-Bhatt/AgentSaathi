@@ -53,9 +53,13 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
       .replace(/\.$/, '');
   }
   
-  // Extract product name - look for plan type in SUMMARY OF COVERAGE section
+  // Extract product name - check for different policy types
   let product_name = 'Individual Health Insurance';
-  if (cleanText.match(/INDIVIDUAL HEALTH INSURANCE POLICY/i)) {
+  
+  // Check for Family Medicare Policy
+  if (cleanText.match(/FAMILY MEDICARE POLICY/i)) {
+    product_name = 'Family Medicare Policy';
+  } else if (cleanText.match(/INDIVIDUAL HEALTH INSURANCE POLICY/i)) {
     // Try to find plan in SUMMARY OF COVERAGE section
     const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,500}?)PREMIUM BREAK DOWN/i);
     if (coverageSection) {
@@ -103,22 +107,30 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
       .trim();
   }
   
-  // Extract sum insured (sum all members)
+  // Extract sum insured - handle both Individual and Family Floater formats
   let sum_insured = 0;
-  const sumInsuredMatches = cleanText.match(/Sum Insured[^0-9]+?((?:\d{1,3},)*\d{3,}(?:\.\d{2})?)/gi);
-  if (sumInsuredMatches) {
-    // Find all sum insured values in the coverage section
-    const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,2000}?)PREMIUM BREAK DOWN/i);
-    if (coverageSection) {
-      const amounts = coverageSection[1].match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
-      if (amounts) {
-        // Sum all amounts that look like sum insured (typically 50000-10000000)
-        amounts.forEach(amt => {
-          const val = parseFloat(amt.replace(/,/g, ''));
-          if (val >= 50000 && val <= 10000000) {
-            sum_insured += val;
-          }
-        });
+  
+  // For Family Floater: look for "Family Floater SI" in the table
+  const floaterSIMatch = cleanText.match(/Family Floater SI\s*[₹()\s]*\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+  if (floaterSIMatch) {
+    sum_insured = parseFloat(floaterSIMatch[1].replace(/,/g, ''));
+  } else {
+    // For Individual policies: sum all member sum insured
+    const sumInsuredMatches = cleanText.match(/Sum Insured[^0-9]+?((?:\d{1,3},)*\d{3,}(?:\.\d{2})?)/gi);
+    if (sumInsuredMatches) {
+      // Find all sum insured values in the coverage section
+      const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,2000}?)PREMIUM BREAK DOWN/i);
+      if (coverageSection) {
+        const amounts = coverageSection[1].match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/g);
+        if (amounts) {
+          // Sum all amounts that look like sum insured (typically 50000-10000000)
+          amounts.forEach(amt => {
+            const val = parseFloat(amt.replace(/,/g, ''));
+            if (val >= 50000 && val <= 10000000) {
+              sum_insured += val;
+            }
+          });
+        }
       }
     }
   }
@@ -151,17 +163,37 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
     }
   }
   
-  // Determine policy holder type
+  // Determine policy holder type - CRITICAL: Check for floater first
   let policy_holder_type: string | null = null;
-  const insuredPersonsSection = cleanText.match(/DETAILS OF INSURED PERSONS(.{0,1500}?)SUMMARY OF COVERAGE/i);
-  if (insuredPersonsSection) {
-    // Count rows (look for relation keywords)
-    const relations = insuredPersonsSection[1].match(/\b(Self|Spouse|Son|Daughter|Father|Mother)\b/gi);
-    if (relations) {
-      policy_holder_type = relations.length > 1 ? 'Family' : 'Individual';
+  
+  // Check for Family Floater Basis (most reliable indicator)
+  if (cleanText.match(/Family Floater Basis/i) || cleanText.match(/Policy Type\s*:?\s*Family Floater/i)) {
+    policy_holder_type = 'Floater';
+  } else {
+    // Check insured persons section
+    const insuredPersonsSection = cleanText.match(/DETAILS OF INSURED PERSONS(.{0,1500}?)(?:SUMMARY OF COVERAGE|Optional Cover)/i);
+    if (!insuredPersonsSection) {
+      // Try alternate section name for Family Medicare
+      const insuredDetailsSection = cleanText.match(/Insured Details(.{0,2000}?)(?:Optional Cover|OPTIONAL COVERS)/i);
+      if (insuredDetailsSection) {
+        // Count family members (look for relation keywords)
+        const relations = insuredDetailsSection[1].match(/\b(Self|Spouse|Son|Daughter|Father|Mother|Child)\b/gi);
+        if (relations && relations.length > 1) {
+          policy_holder_type = 'Family';
+        } else {
+          policy_holder_type = 'Individual';
+        }
+      }
+    } else {
+      // Count rows (look for relation keywords)
+      const relations = insuredPersonsSection[1].match(/\b(Self|Spouse|Son|Daughter|Father|Mother|Child)\b/gi);
+      if (relations) {
+        policy_holder_type = relations.length > 1 ? 'Family' : 'Individual';
+      }
     }
-    // Check if floater is mentioned
-    if (cleanText.match(/floater/i)) {
+    
+    // Final check: if floater is mentioned anywhere, override
+    if (cleanText.match(/\bfloater\b/i)) {
       policy_holder_type = 'Floater';
     }
   }
