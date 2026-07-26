@@ -285,16 +285,16 @@ export async function POST(request: NextRequest) {
                 client_name: extracted.client_name,
                 policy_number: extracted.policy_number,
                 previous_policy_number: extracted.previous_policy_number || null,
-                company: extracted.company,
-                policy_type: extracted.policy_type,
-                product_name: extracted.product_name,
+                company: extracted.company || 'United India Insurance',  // ✅ Ensure set
+                policy_type: extracted.policy_type || 'Health Insurance',  // ✅ Ensure set
+                product_name: extracted.product_name || 'Family Medicare Policy',  // ✅ Ensure set
                 sum_insured: extracted.sum_insured,
                 premium: extracted.premium,
                 start_date: extracted.start_date,
                 renewal_date: extracted.renewal_date,
                 client_address: extracted.client_address,
-                policy_holder_type: extracted.policy_holder_type,
-                mode: null,
+                policy_holder_type: extracted.policy_holder_type || 'Individual',  // ✅ Ensure set
+                mode: 'Annual',  // ✅ Add default mode
               };
               
               console.log(`[extract] ✅ United India policy detected: ${extracted.policy_number}`);
