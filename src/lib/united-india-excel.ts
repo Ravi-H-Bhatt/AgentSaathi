@@ -82,7 +82,9 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
     if (!row[3] || String(row[3]).trim() === '') continue;
     
     const departmentName = row[1] ? String(row[1]).trim() : '';
-    const policyNumber = row[2] ? String(row[2]).trim() : '';
+    let policyNumber = row[2] ? String(row[2]).trim() : '';
+    // Remove "/0" suffix from policy numbers (e.g., "0605002825P107058385/0" -> "0605002825P107058385")
+    policyNumber = policyNumber.replace(/\/0$/, '');
     const insuredName = row[3] ? String(row[3]).trim().replace(/\.$/, '') : '';
     const expiryDate = parseDate(row[4]);
     const premium = parseNumber(row[5]);
@@ -99,7 +101,7 @@ export function parseUnitedIndiaExcel(buffer: Buffer): RegisterRow[] {
       policy_type: departmentName || 'Health',
       policy_holder_type: insuredType,
       product_name: null,
-      company: 'UNITED INDIA',
+      company: 'United India Insurance',
       mode: null,
       renewal_date: expiryDate,
       premium: premium,

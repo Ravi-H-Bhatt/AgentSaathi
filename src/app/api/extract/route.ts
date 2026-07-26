@@ -274,11 +274,11 @@ export async function POST(request: NextRequest) {
       // Handle single policy documents (Family Floater, Individual, etc.)
       if (!detection.isRegister && detection.policyCount === 1) {
         try {
-          const { isUnitedIndiaFloaterPolicy, parseUnitedIndiaFloaterPolicy } = await import('@/lib/unitedindia-floater');
+          const { isUnitedIndiaFloaterPolicy, parseUnitedIndiaFloaterText } = await import('@/lib/unitedindia-floater');
           
           if (isUnitedIndiaFloaterPolicy(text)) {
             try {
-              const extracted = parseUnitedIndiaFloaterPolicy(text);
+              const extracted = parseUnitedIndiaFloaterText(text);
               
               const policyRow = {
                 client_name: extracted.client_name,
@@ -296,6 +296,8 @@ export async function POST(request: NextRequest) {
               };
               
               console.log(`[extract] ✅ Floater policy detected: ${extracted.policy_number}`);
+              console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
+              console.log(`[extract]    Family Members: ${extracted.members.length}`);
               
               return NextResponse.json({
                 filePath: path,
@@ -304,10 +306,10 @@ export async function POST(request: NextRequest) {
                 mode: "schedule",
                 rows: [policyRow],
                 registerType: 'unitedindia-floater-schedule',
-                confidence: extracted.confidence_score / 100,
+                confidence: 1.0,
                 metadata: {
-                  detected_on_page: extracted.detected_on_page,
-                  family_members_count: extracted.total_family_members || 0,
+                  family_members_count: extracted.members.length,
+                  family_members: extracted.members,
                   policy_type_detected: extracted.policy_holder_type,
                   detection_type: detection.type,
                 },
