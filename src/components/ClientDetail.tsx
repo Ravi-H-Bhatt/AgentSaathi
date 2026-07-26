@@ -136,6 +136,7 @@ export function ClientDetail({
   const [opening, setOpening] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingPolicy, setDeletingPolicy] = useState<string | null>(null);
+  const [uploadingPolicyId, setUploadingPolicyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ type: "ok" | "err"; msg: string } | null>(
     null
   );
@@ -427,6 +428,52 @@ export function ClientDetail({
     }
   }
 
+  async function uploadPolicyDocument(policyId: string) {
+    // Create hidden file input
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/pdf";
+    
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+
+      if (file.type !== "application/pdf") {
+        setNotice({ type: "err", msg: "Only PDF files are supported" });
+        return;
+      }
+
+      setUploadingPolicyId(policyId);
+      setNotice(null);
+      
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("policyId", policyId);
+
+        const res = await fetch("/api/policies/upload-document", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+
+        setNotice({ type: "ok", msg: "Document uploaded successfully" });
+        router.refresh(); // Refresh to show the new document
+      } catch (e) {
+        setNotice({
+          type: "err",
+          msg: e instanceof Error ? e.message : "Upload failed",
+        });
+      } finally {
+        setUploadingPolicyId(null);
+      }
+    };
+
+    input.click();
+  }
+
   return (
     <div className="space-y-6">
       {/* Header card */}
@@ -644,6 +691,20 @@ export function ClientDetail({
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end w-full sm:w-auto">
+                      {/* Upload Policy Document Button - for all policies */}
+                      <button
+                        onClick={() => uploadPolicyDocument(p.id)}
+                        disabled={uploadingPolicyId === p.id}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-50"
+                        title="Upload policy document (PDF)"
+                      >
+                        {uploadingPolicyId === p.id ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                          <FileText size={14} />
+                        )}
+                        Upload
+                      </button>
                       {/* Motor Policy Edit Button - shown for motor policies with missing data */}
                       {isMotorPolicy(p.policy_type) && needsMotorDataEntry(p) && (
                         <button

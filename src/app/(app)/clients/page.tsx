@@ -40,6 +40,15 @@ export default async function ClientsPage() {
       )
     );
 
+    // Collect motor-specific searchable fields (registration, chassis, make, model)
+    const motorFields = c.policies
+      .flatMap((p) => [
+        p.registration_number,
+        p.vehicle_make,
+        p.vehicle_model,
+      ])
+      .filter((v): v is string => !!v);
+
     return {
       id: c.id,
       full_name: c.full_name,
@@ -52,6 +61,7 @@ export default async function ClientsPage() {
         .filter((n): n is string => !!n),
       policyMeta,
       modes,
+      motorFields, // Add motor fields for search
     };
   });
 

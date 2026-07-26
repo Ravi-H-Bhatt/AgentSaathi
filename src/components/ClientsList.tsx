@@ -20,6 +20,8 @@ interface Row {
   policyMeta?: string[];
   /** Payment modes from policies (for filtering) */
   modes?: string[];
+  /** Motor-specific fields: registration number, make, model */
+  motorFields?: string[];
 }
 
 // Persist the search term so it survives page refresh and back-navigation
@@ -134,6 +136,7 @@ export function ClientsList({
           c.full_name.toLowerCase().includes(term) ||
           c.policyNumbers.some((n) => n.toLowerCase().includes(term)) ||
           (c.policyMeta || []).some((m) => m.toLowerCase().includes(term)) ||
+          (c.motorFields || []).some((m) => m.toLowerCase().includes(term)) ||
           (c.email || "").toLowerCase().includes(term) ||
           (c.phone || "").toLowerCase().includes(term) ||
           (c.address || "").toLowerCase().includes(term)
