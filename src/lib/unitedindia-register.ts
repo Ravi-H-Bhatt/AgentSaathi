@@ -50,7 +50,8 @@ export function parseUnitedIndiaRegister(text: string): RegisterRow[] {
   
   // Find all policy entries
   // Pattern: S.NO (1-3 digits) followed by RO Code (6 digits) and Office Code (7 digits) and Policy Number
-  const policyPattern = /^(\d{1,3})\s+(\d{6})\s+(\d{7})\s+(\d+[A-Z]\d+)/gm;
+  // NOTE: Don't use ^ anchor because PDF text may be on one line without newlines
+  const policyPattern = /(\d{1,3})\s+(\d{6})\s+(\d{7})\s+(\d+[A-Z]\d+)/g;
   
   let match;
   const entries: Array<{startIndex: number; sn: number; policyNumber: string}> = [];
@@ -58,12 +59,18 @@ export function parseUnitedIndiaRegister(text: string): RegisterRow[] {
   while ((match = policyPattern.exec(text)) !== null) {
     const sn = parseInt(match[1]);
     const policyNumber = match[4];
-    entries.push({
-      startIndex: match.index,
-      sn,
-      policyNumber
-    });
+    
+    // Only process if this looks like a valid S.NO (1-99, not a large number)
+    if (sn >= 1 && sn <= 99) {
+      entries.push({
+        startIndex: match.index,
+        sn,
+        policyNumber
+      });
+    }
   }
+  
+  console.log(`[United India Register] Found ${entries.length} potential policy entries`);
   
   // Process each entry
   for (let i = 0; i < entries.length; i++) {
