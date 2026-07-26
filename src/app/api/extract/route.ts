@@ -274,11 +274,11 @@ export async function POST(request: NextRequest) {
       // Handle single policy documents (Family Floater, Individual, etc.)
       if (!detection.isRegister && detection.policyCount === 1) {
         try {
-          const { isUnitedIndiaFloaterPolicy, parseUnitedIndiaFloaterText } = await import('@/lib/unitedindia-floater');
+          const { parseUnitedIndiaText, isUnitedIndiaPolicy } = await import('@/lib/unitedindia');
           
-          if (isUnitedIndiaFloaterPolicy(text)) {
+          if (isUnitedIndiaPolicy(text)) {
             try {
-              const extracted = parseUnitedIndiaFloaterText(text);
+              const extracted = parseUnitedIndiaText(text);
               
               const policyRow = {
                 client_name: extracted.client_name,
@@ -293,11 +293,13 @@ export async function POST(request: NextRequest) {
                 renewal_date: extracted.renewal_date,
                 client_address: extracted.client_address,
                 policy_holder_type: extracted.policy_holder_type,
+                mode: null,
               };
               
-              console.log(`[extract] ✅ Floater policy detected: ${extracted.policy_number}`);
+              console.log(`[extract] ✅ United India policy detected: ${extracted.policy_number}`);
+              console.log(`[extract]    Policy Type: ${extracted.policy_holder_type || 'N/A'}`);
               console.log(`[extract]    Previous Policy: ${extracted.previous_policy_number || 'None'}`);
-              console.log(`[extract]    Family Members: ${extracted.members.length}`);
+              console.log(`[extract]    Product: ${extracted.product_name}`);
               
               return NextResponse.json({
                 filePath: path,
@@ -305,57 +307,20 @@ export async function POST(request: NextRequest) {
                 scanned: false,
                 mode: "schedule",
                 rows: [policyRow],
-                registerType: 'unitedindia-floater-schedule',
+                registerType: 'unitedindia-schedule',
                 confidence: 1.0,
                 metadata: {
-                  family_members_count: extracted.members.length,
-                  family_members: extracted.members,
                   policy_type_detected: extracted.policy_holder_type,
                   detection_type: detection.type,
                 },
               });
-            } catch (floaterErr) {
-              console.log('[extract] Floater parser failed, trying standard parser:', floaterErr);
+            } catch (parseErr) {
+              console.error('[extract] United India parser failed:', parseErr);
+              throw parseErr; // Let it fall through to generic LLM extraction
             }
           }
         } catch (importErr) {
-          console.log('[extract] Floater import error:', importErr);
-        }
-        
-        // Fallback to standard United India parser
-        try {
-          const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
-          const extracted = parseUnitedIndiaText(text);
-          
-          const policyRow = {
-            client_name: extracted.client_name,
-            policy_number: extracted.policy_number,
-            previous_policy_number: extracted.previous_policy_number || null,
-            company: extracted.company,
-            policy_type: extracted.policy_type,
-            product_name: extracted.product_name,
-            sum_insured: extracted.sum_insured,
-            premium: extracted.premium,
-            start_date: extracted.start_date,
-            renewal_date: extracted.renewal_date,
-            client_address: extracted.client_address,
-            policy_holder_type: extracted.policy_holder_type,
-          };
-          
-          console.log(`[extract] ✅ Standard policy detected: ${extracted.policy_number}`);
-          
-          return NextResponse.json({
-            filePath: path,
-            fileName: file.name,
-            scanned: false,
-            mode: "schedule",
-            rows: [policyRow],
-            registerType: 'unitedindia-schedule',
-            confidence: 1.0,
-            metadata: { detection_type: detection.type },
-          });
-        } catch (stdErr) {
-          console.error('[extract] Standard United India extraction failed:', stdErr);
+          console.error('[extract] United India import error:', importErr);
         }
       }
       
