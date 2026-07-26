@@ -57,6 +57,19 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as BulkBody;
   const rows = Array.isArray(body.rows) ? body.rows : [];
+  
+  console.log('[bulk] Received request with', rows.length, 'rows');
+  console.log('[bulk] Source file path:', body.source_file_path || 'none');
+  if (rows.length > 0) {
+    console.log('[bulk] First row sample:', {
+      client_name: rows[0].client_name,
+      policy_number: rows[0].policy_number,
+      previous_policy_number: rows[0].previous_policy_number,
+      company: rows[0].company,
+      product_name: rows[0].product_name,
+    });
+  }
+  
   if (rows.length === 0) {
     return NextResponse.json({ error: "No rows to import" }, { status: 400 });
   }
@@ -289,12 +302,23 @@ export async function POST(request: NextRequest) {
   let matched = false;
   let matchedClientName: string | null = null;
   let matchedPolicyNumber: string | null = null;
+  
+  console.log('[bulk] Checking for policy matches...');
   for (const r of valid) {
     if (!r.previous_policy_number) continue;
     const cur = normPolicy(r.policy_number);
     const prev = normPolicy(r.previous_policy_number);
+    console.log('[bulk] Checking renewal row:', {
+      client_name: r.client_name,
+      policy_number: r.policy_number,
+      normalized_current: cur,
+      previous_policy_number: r.previous_policy_number,
+      normalized_previous: prev,
+    });
     const curMatch = cur ? policyByNumber.get(cur) : undefined;
     const prevMatch = prev ? policyByNumber.get(prev) : undefined;
+    console.log('[bulk]   Current match:', curMatch ? `✅ Found (id: ${curMatch.id})` : '❌ Not found');
+    console.log('[bulk]   Previous match:', prevMatch ? `✅ Found (id: ${prevMatch.id})` : '❌ Not found');
     const target = curMatch || prevMatch;
     if (target) {
       matched = true;
@@ -304,17 +328,24 @@ export async function POST(request: NextRequest) {
         r.policy_number?.toString().trim() ||
         r.previous_policy_number?.toString().trim() ||
         null;
+      console.log('[bulk] ✅ Match found! Client:', matchedClientName, 'Policy:', matchedPolicyNumber);
     }
     // Attach the uploaded PDF to the matched existing policy (current match wins,
     // else the previous/renewed one) so its "View" opens this full document.
     if (body.source_file_path && target) {
+      console.log('[bulk] Attaching PDF to policy:', target.id);
       const { error: attachErr } = await db
         .from("policies")
         .update({ source_file_path: body.source_file_path })
         .eq("id", target.id)
         .eq("agent_id", ownerId)
         .eq("workspace", workspace);
-      if (!attachErr) attached++;
+      if (!attachErr) {
+        attached++;
+        console.log('[bulk] ✅ PDF attached successfully');
+      } else {
+        console.error('[bulk] ❌ Failed to attach PDF:', attachErr.message);
+      }
     }
   }
 

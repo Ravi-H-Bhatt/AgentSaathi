@@ -38,8 +38,14 @@ export function detectUnitedIndiaDocumentType(text: string): DetectionResult {
   const details = {
     hasPolicyDetails: /POLICY\s+(?:DETAILS|NO\.)\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
     hasPreviousPolicyField: /Previous\s+Policy\s+No\.\s*:?\s*\d{10}[A-Z]\d{8}/i.test(text),
-    hasFamilyFloaterBasis: /Family\s+Floater\s+(?:Basis|SI)/i.test(text),
-    hasFamilyMembers: /(?:INSURED DETAILS|DETAILS OF INSURED PERSONS)/i.test(text),
+    // Enhanced pattern to catch more floater variations:
+    // - "FAMILY MEDICARE POLICY" (JHA PDF)
+    // - "Family Floater Basis/SI"
+    // - "Policy Type Family Floater"
+    // - Generic "floater" mention with "family" nearby
+    hasFamilyFloaterBasis: /FAMILY\s+MEDICARE\s+POLICY|Family\s+Floater\s+(?:Basis|SI|Policy)|Policy\s+Type\s*:?\s*Family\s+Floater|(?:family|group).*floater|floater.*(?:family|group)/i.test(text),
+    // Enhanced pattern to catch insured persons section:
+    hasFamilyMembers: /DETAILS?\s+OF\s+(?:THE\s+)?INSURED\s+(?:PERSONS?|MEMBERS?)|INSURED\s+DETAILS?|Insured\s+Persons?\s+Details?/i.test(text),
     policyNumbersFound: uniquePolicies,
   };
 

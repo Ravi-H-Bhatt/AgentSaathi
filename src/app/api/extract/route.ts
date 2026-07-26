@@ -271,6 +271,7 @@ export async function POST(request: NextRequest) {
       // Detect document type (single policy, register, etc.)
       const detection = detectUnitedIndiaDocumentType(text);
       console.log(`[extract] Detected United India document: ${detection.type} (${(detection.confidence * 100).toFixed(0)}% confidence)`);
+      console.log('[extract] Detection details:', JSON.stringify(detection.details, null, 2));
       
       // Handle single policy documents (Family Floater, Individual, etc.)
       if (!detection.isRegister && detection.policyCount === 1) {

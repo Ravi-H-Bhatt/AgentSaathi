@@ -45,21 +45,58 @@ export function parseUnitedIndiaFloaterText(text: string): UnitedIndiaFloaterExt
   // STEP 1: Extract POLICY DETAILS (Page 2)
   // ============================================================
   // CRITICAL: Extract ONLY from "POLICY DETAILS" section (page 2)
-  // This section comes BEFORE "Details of Previous Policies" table (page 3)
-  const policyDetailsSection = cleanText.match(/POLICY DETAILS(.{0,2000}?)(?:DETAILS OF INSURED PERSONS|Details of Previous Policies|$)/i);
+  // This section comes BEFORE "Details of Previous Policies" table (page 3+)
+  // Try multiple patterns to catch different document layouts
+  let policyDetailsSection = cleanText.match(/POLICY DETAILS(.{0,3000}?)(?:DETAILS OF INSURED PERSONS|Details of Previous Policies|INSURED DETAILS|$)/i);
+  
+  // Fallback: Try alternate header
+  if (!policyDetailsSection) {
+    policyDetailsSection = cleanText.match(/YOUR POLICY(.{0,3000}?)(?:DETAILS OF INSURED PERSONS|Details of Previous Policies|INSURED DETAILS|$)/i);
+  }
+  
   const detailsText = policyDetailsSection ? policyDetailsSection[1] : cleanText;
   
-  // Extract policy number (current) - only from Policy Details section
-  const policyNumberMatch = detailsText.match(/Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i) ||
-                            detailsText.match(/YOUR POLICY No\.\s*(\d+[A-Z]\d+)/i) ||
-                            cleanText.match(/YOUR POLICY No\.\s*(\d+[A-Z]\d+)/i);
-  const policy_number = policyNumberMatch?.[1] || '';
+  // Extract policy number (current) - try multiple patterns
+  let policy_number = '';
+  
+  // Pattern 1: "Policy No. : XXXXXXXXXXX"
+  let policyNumberMatch = detailsText.match(/Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  
+  // Pattern 2: "YOUR POLICY No. XXXXXXXXXXX" (without colon)
+  if (!policyNumberMatch) {
+    policyNumberMatch = detailsText.match(/YOUR\s+POLICY\s+No\.?\s*(\d+[A-Z]\d+)/i);
+  }
+  
+  // Pattern 3: Just search for policy number pattern in details section
+  if (!policyNumberMatch) {
+    policyNumberMatch = detailsText.match(/\b(0605002\d{3}[A-Z]\d{8})\b/);
+  }
+  
+  if (policyNumberMatch) {
+    policy_number = policyNumberMatch[1];
+  }
   
   console.log('[United India Floater] Policy Number:', policy_number);
   
-  // Extract previous policy number - only from Policy Details section
-  const prevPolicyMatch = detailsText.match(/Previous Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i);
-  const previous_policy_number = prevPolicyMatch?.[1] || null;
+  // Extract previous policy number - try multiple patterns
+  let previous_policy_number: string | null = null;
+  
+  // Pattern 1: "Previous Policy No. : XXXXXXXXXXX"
+  let prevPolicyMatch = detailsText.match(/Previous\s+Policy\s+No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  
+  // Pattern 2: "Prev. Policy No. : XXXXXXXXXXX"
+  if (!prevPolicyMatch) {
+    prevPolicyMatch = detailsText.match(/Prev\.?\s+Policy\s+No\.?\s*:?\s*(\d+[A-Z]\d+)/i);
+  }
+  
+  // Pattern 3: "Renewed from : XXXXXXXXXXX"
+  if (!prevPolicyMatch) {
+    prevPolicyMatch = detailsText.match(/Renewed\s+from\s*:?\s*(\d+[A-Z]\d+)/i);
+  }
+  
+  if (prevPolicyMatch) {
+    previous_policy_number = prevPolicyMatch[1];
+  }
   
   console.log('[United India Floater] Previous Policy Number:', previous_policy_number);
   
