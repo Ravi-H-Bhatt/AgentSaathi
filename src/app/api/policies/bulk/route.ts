@@ -167,9 +167,16 @@ export async function POST(request: NextRequest) {
     string,
     { id: string; source_file_path: string | null; client_id: string }
   >();
+  
+  console.log('[bulk] =====================================');
+  console.log('[bulk] Loading existing policies from database...');
+  console.log('[bulk] Owner ID:', ownerId);
+  console.log('[bulk] Workspace:', workspace);
+  
   {
     let from = 0;
     const pageSize = 1000;
+    let totalLoaded = 0;
     for (;;) {
       const { data } = await db
         .from("policies")
@@ -181,6 +188,9 @@ export async function POST(request: NextRequest) {
         .range(from, from + pageSize - 1);
       const batch = (data as any[]) || [];
       if (batch.length === 0) break;
+      
+      totalLoaded += batch.length;
+      
       for (const p of batch) {
         const cname = clientNameById.get(p.client_id) || "";
         const np = normPolicy(p.policy_number);
@@ -192,6 +202,16 @@ export async function POST(request: NextRequest) {
             source_file_path: p.source_file_path ?? null,
             client_id: p.client_id,
           });
+          
+          // Log United India policies for debugging
+          if (p.company?.toLowerCase().includes('united india')) {
+            console.log('[bulk]   📋 United India policy:', {
+              policy_number: p.policy_number,
+              normalized: np,
+              client_name: cname,
+              product: p.product_name,
+            });
+          }
         }
         existingDetailKeys.add(
           detailKey(
@@ -209,6 +229,10 @@ export async function POST(request: NextRequest) {
       if (batch.length < pageSize) break;
       from += pageSize;
     }
+    
+    console.log('[bulk] Total policies loaded:', totalLoaded);
+    console.log('[bulk] Unique policy numbers:', existingPolicyNums.size);
+    console.log('[bulk] =====================================');
   }
 
   // Renewal mapping: for each row, if its previous OR current policy number is
