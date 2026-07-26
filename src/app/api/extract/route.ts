@@ -289,6 +289,8 @@ export async function POST(request: NextRequest) {
               const extracted = parseUnitedIndiaFloaterText(text);
               
               // CRITICAL: Ensure previous_policy_number is included in the row
+              // NOTE: The 'mode' in policyRow is the policy mode (Annual/Monthly),
+              // NOT the API response mode (which should be 'schedule' for renewals)
               const policyRow = {
                 client_name: extracted.client_name,
                 policy_number: extracted.policy_number,
@@ -302,7 +304,7 @@ export async function POST(request: NextRequest) {
                 renewal_date: extracted.renewal_date,
                 client_address: extracted.client_address,
                 policy_holder_type: extracted.policy_holder_type || 'Floater',
-                mode: extracted.mode || 'Annual',
+                mode: extracted.mode || 'Annual', // Policy mode (Annual/Monthly)
               };
               
               console.log(`[extract] ✅ United India FLOATER policy parsed successfully`);
