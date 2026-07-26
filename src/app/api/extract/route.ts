@@ -5,6 +5,7 @@ import { ownerIdFor, permissionsFor, logActivity } from "@/lib/team";
 import { extractPdfText } from "@/lib/pdf";
 import { extractPolicyFromText, extractBulkPoliciesFromText } from "@/lib/groq";
 import { parseRegisterAuto } from "@/lib/register";
+import { detectUnitedIndiaDocumentType } from "@/lib/unitedindia-detector";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -258,7 +259,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Check if this is a United India Insurance policy (single policy)
+  // Check if this is a United India Insurance document
   const lowerText = text.toLowerCase();
   const isUnitedIndia = lowerText.includes("united india insurance") ||
                          lowerText.includes("uiic.co.in") ||
@@ -266,35 +267,122 @@ export async function POST(request: NextRequest) {
   
   if (isUnitedIndia) {
     try {
-      const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
-      const extracted = parseUnitedIndiaText(text);
+      // Detect document type (single policy, register, etc.)
+      const detection = detectUnitedIndiaDocumentType(text);
+      console.log(`[extract] Detected United India document: ${detection.type} (${(detection.confidence * 100).toFixed(0)}% confidence)`);
       
-      const policyRow = {
-        client_name: extracted.client_name,
-        policy_number: extracted.policy_number,
-        previous_policy_number: extracted.previous_policy_number || null,
-        company: extracted.company,
-        policy_type: extracted.policy_type,
-        product_name: extracted.product_name,
-        sum_insured: extracted.sum_insured,
-        premium: extracted.premium,
-        start_date: extracted.start_date,
-        renewal_date: extracted.renewal_date,
-        client_address: extracted.client_address,
-        policy_holder_type: extracted.policy_holder_type,
-      };
+      // Handle single policy documents (Family Floater, Individual, etc.)
+      if (!detection.isRegister && detection.policyCount === 1) {
+        try {
+          const { isUnitedIndiaFloaterPolicy, parseUnitedIndiaFloaterPolicy } = await import('@/lib/unitedindia-floater');
+          
+          if (isUnitedIndiaFloaterPolicy(text)) {
+            try {
+              const extracted = parseUnitedIndiaFloaterPolicy(text);
+              
+              const policyRow = {
+                client_name: extracted.client_name,
+                policy_number: extracted.policy_number,
+                previous_policy_number: extracted.previous_policy_number || null,
+                company: extracted.company,
+                policy_type: extracted.policy_type,
+                product_name: extracted.product_name,
+                sum_insured: extracted.sum_insured,
+                premium: extracted.premium,
+                start_date: extracted.start_date,
+                renewal_date: extracted.renewal_date,
+                client_address: extracted.client_address,
+                policy_holder_type: extracted.policy_holder_type,
+              };
+              
+              console.log(`[extract] ✅ Floater policy detected: ${extracted.policy_number}`);
+              
+              return NextResponse.json({
+                filePath: path,
+                fileName: file.name,
+                scanned: false,
+                mode: "schedule",
+                rows: [policyRow],
+                registerType: 'unitedindia-floater-schedule',
+                confidence: extracted.confidence_score / 100,
+                metadata: {
+                  detected_on_page: extracted.detected_on_page,
+                  family_members_count: extracted.total_family_members || 0,
+                  policy_type_detected: extracted.policy_holder_type,
+                  detection_type: detection.type,
+                },
+              });
+            } catch (floaterErr) {
+              console.log('[extract] Floater parser failed, trying standard parser:', floaterErr);
+            }
+          }
+        } catch (importErr) {
+          console.log('[extract] Floater import error:', importErr);
+        }
+        
+        // Fallback to standard United India parser
+        try {
+          const { parseUnitedIndiaText } = await import('@/lib/unitedindia');
+          const extracted = parseUnitedIndiaText(text);
+          
+          const policyRow = {
+            client_name: extracted.client_name,
+            policy_number: extracted.policy_number,
+            previous_policy_number: extracted.previous_policy_number || null,
+            company: extracted.company,
+            policy_type: extracted.policy_type,
+            product_name: extracted.product_name,
+            sum_insured: extracted.sum_insured,
+            premium: extracted.premium,
+            start_date: extracted.start_date,
+            renewal_date: extracted.renewal_date,
+            client_address: extracted.client_address,
+            policy_holder_type: extracted.policy_holder_type,
+          };
+          
+          console.log(`[extract] ✅ Standard policy detected: ${extracted.policy_number}`);
+          
+          return NextResponse.json({
+            filePath: path,
+            fileName: file.name,
+            scanned: false,
+            mode: "schedule",
+            rows: [policyRow],
+            registerType: 'unitedindia-schedule',
+            confidence: 1.0,
+            metadata: { detection_type: detection.type },
+          });
+        } catch (stdErr) {
+          console.error('[extract] Standard United India extraction failed:', stdErr);
+        }
+      }
       
-      return NextResponse.json({
-        filePath: path,
-        fileName: file.name,
-        scanned: false,
-        mode: "schedule",
-        rows: [policyRow],
-        registerType: 'unitedindia-schedule',
-        confidence: 1.0,
-      });
+      // Handle Premium Register (bulk)
+      if (detection.type === 'premium-register') {
+        try {
+          const { parseUnitedIndiaRegister } = await import('@/lib/unitedindia-register');
+          const rows = parseUnitedIndiaRegister(text);
+          
+          if (rows.length > 0) {
+            console.log(`[extract] ✅ Premium register detected: ${rows.length} policies`);
+            return NextResponse.json({
+              filePath: path,
+              fileName: file.name,
+              scanned: false,
+              mode: "bulk",
+              rowCount: rows.length,
+              rows,
+              registerType: 'unitedindia-register',
+              confidence: detection.confidence,
+              metadata: { detection_type: detection.type },
+            });
+          }
+        } catch (regErr) {
+          console.log('[extract] Register parsing error:', regErr);
+        }
+      }
     } catch (err) {
-      console.error('[extract] United India extraction failed:', err);
+      console.error('[extract] United India detection error:', err);
     }
   }
 
