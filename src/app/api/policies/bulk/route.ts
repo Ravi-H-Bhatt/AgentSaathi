@@ -421,6 +421,24 @@ export async function POST(request: NextRequest) {
   console.log('[bulk] =====================================');
 
   if (toImport.length === 0) {
+    // All rows were filtered out (matched or duplicates)
+    // Check if this was a schedule/renewal match
+    if (matched && attached > 0) {
+      return NextResponse.json({
+        ok: true,
+        created: 0,
+        duplicates,
+        skippedNoName,
+        skippedConflict: 0,
+        clientsCreated: 0,
+        matched,
+        attached,
+        matchedClientName,
+        matchedPolicyNumber,
+        message: "Match found — document attached to the existing policy.",
+      });
+    }
+    
     return NextResponse.json({
       ok: true,
       created: 0,
