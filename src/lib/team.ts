@@ -23,12 +23,12 @@ export function permissionsFor(agent: Agent): Permissions {
     return { ai: true, clients: true, upload: true, email: true, delete: true };
   // Colleagues get full permissions with delete always enabled
   return {
+    ...agent.permissions,
     ai: true,
     clients: true,
     upload: true,
     email: true,
     delete: true,
-    ...agent.permissions,
   };
 }
 
