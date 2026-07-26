@@ -16,6 +16,7 @@ export interface UnitedIndiaExtraction {
   renewal_date: string;
   client_address: string | null;
   policy_holder_type: string | null;
+  mode?: string | null;
 }
 
 /**
@@ -52,25 +53,54 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
       .replace(/\.$/, '');
   }
   
-  // Extract product name
+  // Extract product name - look for plan type in SUMMARY OF COVERAGE section
   let product_name = 'Individual Health Insurance';
   if (cleanText.match(/INDIVIDUAL HEALTH INSURANCE POLICY/i)) {
-    const planMatch = cleanText.match(/(Platinum|Gold|Silver)\s*\d{6}/i);
-    if (planMatch) {
-      product_name = `Individual Health Insurance - ${planMatch[1]}`;
+    // Try to find plan in SUMMARY OF COVERAGE section
+    const coverageSection = cleanText.match(/SUMMARY OF COVERAGE(.{0,500}?)PREMIUM BREAK DOWN/i);
+    if (coverageSection) {
+      const planMatch = coverageSection[1].match(/\b(Platinum|Gold|Silver)\b/i);
+      if (planMatch) {
+        product_name = `Individual Health Insurance - ${planMatch[1]}`;
+      }
+    }
+    // Fallback: look anywhere in document
+    if (product_name === 'Individual Health Insurance') {
+      const planMatch = cleanText.match(/\b(Platinum|Gold|Silver)\b/i);
+      if (planMatch) {
+        product_name = `Individual Health Insurance - ${planMatch[1]}`;
+      }
     }
   }
   
-  // Extract dates (Period of Insurance)
-  const periodMatch = cleanText.match(/Period of Insurance\s*:?\s*From[^0-9]*(\d{2}\/\d{2}\/\d{4})[^T]*To[^0-9]*(\d{2}\/\d{2}\/\d{4})/i);
-  const start_date = periodMatch?.[1] || '';
-  const renewal_date = periodMatch?.[2] || '';
+  // Extract dates (Period of Insurance) - handle various formats
+  let start_date = '';
+  let renewal_date = '';
+  // Try multiple patterns to catch different date formats
+  let periodMatch = cleanText.match(/Period of Insurance\s*:?\s*From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?(\d{2}\/\d{2}\/\d{4})/i);
+  if (!periodMatch) {
+    // Try without "of Insurance"
+    periodMatch = cleanText.match(/Period\s*:?\s*From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?(\d{2}\/\d{2}\/\d{4})/i);
+  }
+  if (!periodMatch) {
+    // Try with "on" instead of exact date position
+    periodMatch = cleanText.match(/From[^0-9]*?(\d{2}\/\d{2}\/\d{4})[^T]*?To[^0-9]*?on\s*(\d{2}\/\d{2}\/\d{4})/i);
+  }
+  if (periodMatch) {
+    start_date = periodMatch[1];
+    renewal_date = periodMatch[2];
+  }
   
-  // Extract address
+  // Extract address - improved to capture full address including multi-line
   let client_address = null;
-  const addressMatch = cleanText.match(/Address\s*:?\s*([^T]+?)(?:\s+Tel \(O\/R\)|Mobile|$)/i);
+  const addressMatch = cleanText.match(/Address\s*:?\s*(.+?)(?:\s+(?:AHMADABAD|AHMEDABAD|Tel|Mobile|Fax|E-Mail|Business))/i);
   if (addressMatch) {
-    client_address = addressMatch[1].trim().replace(/\s+/g, ' ');
+    client_address = addressMatch[1]
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/DIST\.\s*:/gi, 'DIST:')
+      .replace(/\s+,/g, ',')
+      .trim();
   }
   
   // Extract sum insured (sum all members)
@@ -101,18 +131,23 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
     }
   }
   
-  // Extract premium (final total from Payment Details)
+  // Extract premium (final total from Payment Details) - look for last Total before Receipt
   let premium = 0;
-  const paymentSection = cleanText.match(/PAYMENT DETAILS(.{0,1000})(?:INTERMEDIARY|Receipt Number)/i);
+  const paymentSection = cleanText.match(/PAYMENT DETAILS(.{0,1500})(?:Receipt Number|Receipt Date|INTERMEDIARY)/i);
   if (paymentSection) {
-    // Look for the last "Total" line before INTERMEDIARY
-    const totalMatches = paymentSection[1].match(/Total\s*:?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi);
-    if (totalMatches && totalMatches.length > 0) {
+    // Look for Total followed by a number - get the LAST occurrence which is the final total
+    const totalMatches = [...paymentSection[1].matchAll(/Total\s*:?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/gi)];
+    if (totalMatches.length > 0) {
       const lastTotal = totalMatches[totalMatches.length - 1];
-      const amountMatch = lastTotal.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/);
-      if (amountMatch) {
-        premium = parseFloat(amountMatch[1].replace(/,/g, ''));
-      }
+      premium = parseFloat(lastTotal[1].replace(/,/g, ''));
+    }
+  }
+  
+  // Fallback: try to get from Premium Break Down total
+  if (premium === 0) {
+    const breakdownMatch = cleanText.match(/Total Annual Premium[^\d]*?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)/i);
+    if (breakdownMatch) {
+      premium = parseFloat(breakdownMatch[1].replace(/,/g, ''));
     }
   }
   

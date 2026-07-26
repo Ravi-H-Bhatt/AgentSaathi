@@ -6,6 +6,7 @@ import { looksLikeTMIRegister, parseTMIRegister } from "./tmi";
 import { looksLikeERegister, parseERegister } from "./eregister-parser";
 import { looksLikeLicDateWise, parseLicDateWise } from "./lic-date-wise";
 import { looksLikeLicPremiumDueList, parseLicPremiumDueList } from "./lic-premium-due";
+import { looksLikeUnitedIndiaRegister, parseUnitedIndiaRegister } from "./unitedindia-register";
 
 /**
  * AUTO-DETECTING REGISTER PARSER
@@ -26,7 +27,7 @@ import { looksLikeLicPremiumDueList, parseLicPremiumDueList } from "./lic-premiu
  */
 export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<{ 
   rows: RegisterRow[]; 
-  type: 'newindia' | 'newindia-premium' | 'newindia-schedule' | 'tmi' | 'eregister' | 'lic' | 'lic-date-wise' | 'lic-premium-due' | 'unknown';
+  type: 'newindia' | 'newindia-premium' | 'newindia-schedule' | 'tmi' | 'eregister' | 'lic' | 'lic-date-wise' | 'lic-premium-due' | 'unitedindia-register' | 'unknown';
   confidence: number;
 }> {
   // LIC "Date Wise Premium Due" (newest format with F.U.P as actual renewal date)
@@ -41,6 +42,13 @@ export async function parseRegisterAuto(text: string, buffer?: Buffer): Promise<
     console.log('[register] Detected: LIC Premium Due List');
     const rows = parseLicPremiumDueList(text);
     return { rows, type: 'lic-premium-due', confidence: 1.0 };
+  }
+
+  // United India Premium Register (table format with multiple policies)
+  if (looksLikeUnitedIndiaRegister(text)) {
+    console.log('[register] Detected: United India Premium Register');
+    const rows = parseUnitedIndiaRegister(text);
+    return { rows, type: 'unitedindia-register', confidence: 1.0 };
   }
 
   // New India single "Policy Schedule" (one policy, carries previous policy no).
