@@ -25,13 +25,19 @@ export function parseUnitedIndiaText(text: string): UnitedIndiaExtraction {
   // Clean up text for easier parsing
   const cleanText = text.replace(/\s+/g, ' ').trim();
   
-  // Extract policy number (current)
-  const policyNumberMatch = cleanText.match(/Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i) ||
+  // CRITICAL: Extract ONLY from "POLICY DETAILS" section (page 2)
+  // This section comes BEFORE "Details of Previous Policies" table (page 3)
+  // We want to avoid picking up old policy numbers from the history table
+  const policyDetailsSection = cleanText.match(/POLICY DETAILS(.{0,1500}?)(?:Details of Previous Policies|INDIVIDUAL HEALTH INSURANCE POLICY CUSTOMER|$)/i);
+  const detailsText = policyDetailsSection ? policyDetailsSection[1] : cleanText;
+  
+  // Extract policy number (current) - only from Policy Details section
+  const policyNumberMatch = detailsText.match(/Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i) ||
                             cleanText.match(/YOUR POLICY No\.\s*(\d+[A-Z]\d+)/i);
   const policy_number = policyNumberMatch?.[1] || '';
   
-  // Extract previous policy number
-  const prevPolicyMatch = cleanText.match(/Previous Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i);
+  // Extract previous policy number - only from Policy Details section
+  const prevPolicyMatch = detailsText.match(/Previous Policy No\.\s*:?\s*(\d+[A-Z]\d+)/i);
   const previous_policy_number = prevPolicyMatch?.[1] || null;
   
   // Extract policyholder name

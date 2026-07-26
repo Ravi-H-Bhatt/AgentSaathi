@@ -389,6 +389,7 @@ export function ClientDetail({
       // If that was the client's last policy, the client was removed too.
       if (data.clientDeleted) {
         router.push("/clients");
+        return;
       }
       router.refresh();
     } catch (e) {
@@ -396,6 +397,7 @@ export function ClientDetail({
         type: "err",
         msg: e instanceof Error ? e.message : "Delete failed.",
       });
+    } finally {
       setDeletingPolicy(null);
     }
   }
