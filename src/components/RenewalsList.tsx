@@ -238,39 +238,39 @@ export function RenewalsList({
               </div>
                 
               {/* Column 3: Action buttons - fixed width for alignment */}
-              <div className="flex items-center justify-end gap-1 w-[168px] shrink-0">
+              <div className="flex items-center justify-end gap-0.5 w-[180px] flex-wrap">
               {isConfirming ? (
                 <>
                   <button
                     onClick={() => markAsRenewed(item.id)}
                     disabled={isProcessing}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50 text-xs font-medium"
+                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50 text-xs font-medium h-8"
                     title="Confirm renewal"
                   >
                     {isProcessing ? (
-                      <Loader2 size={13} className="animate-spin" />
+                      <Loader2 size={12} className="animate-spin" />
                     ) : (
-                      <CheckCircle2 size={13} />
+                      <CheckCircle2 size={12} />
                     )}
                     <span>Confirm</span>
                   </button>
                   <button
                     onClick={() => setConfirmRenewId(null)}
                     disabled={isProcessing}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
+                    className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
                     title="Cancel"
                   >
-                    <X size={14} />
+                    <X size={13} />
                   </button>
                 </>
               ) : (
                 <>
                   <button
                     onClick={() => setConfirmRenewId(item.id)}
-                    className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200 text-xs font-medium min-w-max"
+                    className="inline-flex items-center justify-center gap-0.5 px-2 py-1 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200 text-xs font-medium h-8"
                     title="Mark policy as renewed"
                   >
-                    <CheckCircle2 size={13} />
+                    <CheckCircle2 size={12} />
                     <span>Renewed</span>
                   </button>
                   {/* WhatsApp shows ONLY when the client has a valid mobile */}
@@ -279,14 +279,14 @@ export function RenewalsList({
                       href={waLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 text-xs font-medium min-w-max"
+                      className="inline-flex items-center justify-center gap-0.5 px-2 py-1 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 text-xs font-medium h-8"
                       title={`Send WhatsApp reminder to ${item.clientPhone}`}
                     >
-                      <MessageCircle size={13} />
+                      <MessageCircle size={12} />
                       <span>WhatsApp</span>
                     </a>
                   ) : (
-                    <div className="w-[92px]" />
+                    <div className="w-[72px]" />
                   )}
                 </>
               )}
