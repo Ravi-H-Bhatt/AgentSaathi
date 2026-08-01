@@ -71,7 +71,7 @@ export default async function DashboardPage() {
 
   const overdueRenewals = policyWithDays
     .filter(({ d }) => d != null && d < 0 && d >= -5)
-    .sort((a, b) => (b.d as number) - (a.d as number)) // most overdue first
+    .sort((a, b) => (a.d as number) - (b.d as number)) // most overdue first (most negative = oldest)
     .map(({ p }) => p);
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);
 
@@ -118,81 +118,85 @@ export default async function DashboardPage() {
       <Reveal delay={0.1}>
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Left: Renewals in next 30 days - takes 2 columns on desktop */}
-          <section className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <section className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden flex flex-col max-h-[600px]">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="font-semibold">Renewals in next 30 days</h2>
               <span className="text-sm text-muted">
                 {renewalsThisMonth.length} due
               </span>
             </div>
-            {renewalsThisMonth.length === 0 ? (
-              <p className="px-5 py-10 text-center text-muted text-sm">
-                No renewals in the next 30 days. You&apos;re all caught up.
-              </p>
-            ) : (
-              <RenewalsList
-                  agentName={agent.full_name || agent.email}
-                  renewals={renewalsThisMonth.map((p: Policy) => {
-                  const c = clientById.get(p.client_id) as Client | undefined;
-                  return {
-                    id: p.id,
-                    clientId: p.client_id,
-                    clientName: c?.full_name || "Unknown client",
-                    clientEmail: c?.email || null,
-                    clientPhone: c?.phone || null,
-                    policyType: p.policy_type,
-                    company: p.company,
-                    policyNumber: p.policy_number,
-                    sumInsured: p.sum_insured,
-                    premium: p.premium,
-                    renewalDate: p.renewal_date,
-                    mode: p.mode,
-                    nextDueDate: isLic
-                      ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
-                      : undefined,
-                    daysLeft: isLic ? dueInDays(p) : undefined,
-                  };
-                })} />
-            )}
+            <div className="overflow-y-auto flex-1">
+              {renewalsThisMonth.length === 0 ? (
+                <p className="px-5 py-10 text-center text-muted text-sm">
+                  No renewals in the next 30 days. You&apos;re all caught up.
+                </p>
+              ) : (
+                <RenewalsList
+                    agentName={agent.full_name || agent.email}
+                    renewals={renewalsThisMonth.map((p: Policy) => {
+                    const c = clientById.get(p.client_id) as Client | undefined;
+                    return {
+                      id: p.id,
+                      clientId: p.client_id,
+                      clientName: c?.full_name || "Unknown client",
+                      clientEmail: c?.email || null,
+                      clientPhone: c?.phone || null,
+                      policyType: p.policy_type,
+                      company: p.company,
+                      policyNumber: p.policy_number,
+                      sumInsured: p.sum_insured,
+                      premium: p.premium,
+                      renewalDate: p.renewal_date,
+                      mode: p.mode,
+                      nextDueDate: isLic
+                        ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
+                        : undefined,
+                      daysLeft: isLic ? dueInDays(p) : undefined,
+                    };
+                  })} />
+              )}
+            </div>
           </section>
 
           {/* Right: Overdue renewals */}
-          <section className="rounded-2xl border border-border bg-card overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <section className="rounded-2xl border border-border bg-card overflow-hidden flex flex-col max-h-[600px]">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="font-semibold">Overdue</h2>
               <span className="text-sm text-red-600 font-medium">
                 {overdueRenewals.length}
               </span>
             </div>
-            {overdueRenewals.length === 0 ? (
-              <p className="px-5 py-10 text-center text-muted text-sm">
-                No overdue renewals. Great job!
-              </p>
-            ) : (
-              <RenewalsList
-                  agentName={agent.full_name || agent.email}
-                  renewals={overdueRenewals.map((p: Policy) => {
-                  const c = clientById.get(p.client_id) as Client | undefined;
-                  return {
-                    id: p.id,
-                    clientId: p.client_id,
-                    clientName: c?.full_name || "Unknown client",
-                    clientEmail: c?.email || null,
-                    clientPhone: c?.phone || null,
-                    policyType: p.policy_type,
-                    company: p.company,
-                    policyNumber: p.policy_number,
-                    sumInsured: p.sum_insured,
-                    premium: p.premium,
-                    renewalDate: p.renewal_date,
-                    mode: p.mode,
-                    nextDueDate: isLic
-                      ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
-                      : undefined,
-                    daysLeft: isLic ? dueInDays(p) : undefined,
-                  };
-                })} />
-            )}
+            <div className="overflow-y-auto flex-1">
+              {overdueRenewals.length === 0 ? (
+                <p className="px-5 py-10 text-center text-muted text-sm">
+                  No overdue renewals. Great job!
+                </p>
+              ) : (
+                <RenewalsList
+                    agentName={agent.full_name || agent.email}
+                    renewals={overdueRenewals.map((p: Policy) => {
+                    const c = clientById.get(p.client_id) as Client | undefined;
+                    return {
+                      id: p.id,
+                      clientId: p.client_id,
+                      clientName: c?.full_name || "Unknown client",
+                      clientEmail: c?.email || null,
+                      clientPhone: c?.phone || null,
+                      policyType: p.policy_type,
+                      company: p.company,
+                      policyNumber: p.policy_number,
+                      sumInsured: p.sum_insured,
+                      premium: p.premium,
+                      renewalDate: p.renewal_date,
+                      mode: p.mode,
+                      nextDueDate: isLic
+                        ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
+                        : undefined,
+                      daysLeft: isLic ? dueInDays(p) : undefined,
+                    };
+                  })} />
+              )}
+            </div>
           </section>
         </div>
       </Reveal>
