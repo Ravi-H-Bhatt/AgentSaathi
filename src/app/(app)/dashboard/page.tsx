@@ -116,9 +116,9 @@ export default async function DashboardPage() {
       </Reveal>
 
       <Reveal delay={0.1}>
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Left: Renewals in next 30 days - takes 2 columns on desktop */}
-          <section className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden flex flex-col max-h-[600px]">
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Left: Renewals in next 30 days - EQUAL width */}
+          <section className="rounded-2xl border border-border bg-card overflow-hidden flex flex-col max-h-[600px]">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="font-semibold">Renewals in next 30 days</h2>
               <span className="text-sm text-muted">
@@ -158,7 +158,7 @@ export default async function DashboardPage() {
             </div>
           </section>
 
-          {/* Right: Overdue renewals */}
+          {/* Right: Overdue renewals - EQUAL width */}
           <section className="rounded-2xl border border-border bg-card overflow-hidden flex flex-col max-h-[600px]">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between shrink-0">
               <h2 className="font-semibold">Overdue</h2>

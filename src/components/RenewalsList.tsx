@@ -205,10 +205,11 @@ export function RenewalsList({
               initial={{ opacity: 1 }}
               exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              className="flex items-center justify-between px-3 py-3 gap-2 hover:bg-black/[.02] transition-colors">
+              className="grid grid-cols-[1fr,auto,auto] items-center gap-3 px-3 py-3 hover:bg-black/[.02] transition-colors">
+              {/* Column 1: Name and details - flexible width */}
               <Link
                 href={`/clients/${item.clientId}`}
-                className="min-w-0 flex-1 group"
+                className="min-w-0 group"
               >
                 <p className="font-medium text-sm truncate group-hover:underline underline-offset-2">
                   {item.clientName}
@@ -216,78 +217,77 @@ export function RenewalsList({
                 <p className="text-xs text-muted truncate">
                   {item.policyType || "Policy"}
                   {item.company ? ` · ${item.company}` : ""}
-                  {item.policyNumber ? ` · ${item.policyNumber}` : ""}
                 </p>
               </Link>
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="text-right w-20 shrink-0">
-                  <p className="text-xs font-medium whitespace-nowrap">{shortDate(adjustedDate)}</p>
-                  <p className={`text-[10px] font-semibold ${
-                    dleft != null && dleft < 0 
-                      ? "text-red-600" 
-                      : dleft != null && dleft <= 7 
-                      ? "text-red-600" 
-                      : "text-muted"
-                  }`}>
-                    {dleft != null
-                      ? dleft < 0 
-                        ? `OVERDUE ${Math.abs(dleft)}d` 
-                        : dleft === 0
-                        ? "DUE TODAY"
-                        : `in ${dleft}d`
-                      : ""}
-                  </p>
-                </div>
+              
+              {/* Column 2: Date - fixed width for alignment */}
+              <div className="text-right w-24 shrink-0">
+                <p className="text-xs font-medium whitespace-nowrap">{shortDate(adjustedDate)}</p>
+                <p className={`text-[10px] font-semibold ${
+                  dleft != null && dleft < 0 
+                    ? "text-red-600" 
+                    : dleft != null && dleft <= 7 
+                    ? "text-red-600" 
+                    : "text-muted"
+                }`}>
+                  {dleft != null
+                    ? dleft < 0 
+                      ? `OVERDUE ${Math.abs(dleft)}d` 
+                      : dleft === 0
+                      ? "DUE TODAY"
+                      : `in ${dleft}d`
+                    : ""}
+                </p>
+              </div>
                 
-                {/* Action area - icon-only buttons for better space usage */}
-                <div className="flex items-center justify-end gap-1.5 shrink-0">
-                {isConfirming ? (
-                  <>
-                    <button
-                      onClick={() => markAsRenewed(item.id)}
-                      disabled={isProcessing}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
-                      title="Confirm renewal"
-                    >
-                      {isProcessing ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <CheckCircle2 size={14} />
-                      )}
-                    </button>
-                    <button
-                      onClick={() => setConfirmRenewId(null)}
-                      disabled={isProcessing}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
-                      title="Cancel"
-                    >
-                      <X size={14} />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => setConfirmRenewId(item.id)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
-                      title="Mark policy as renewed"
-                    >
+              {/* Column 3: Action buttons - fixed width for alignment */}
+              <div className="flex items-center justify-end gap-1.5 w-20 shrink-0">
+              {isConfirming ? (
+                <>
+                  <button
+                    onClick={() => markAsRenewed(item.id)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
+                    title="Confirm renewal"
+                  >
+                    {isProcessing ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
                       <CheckCircle2 size={14} />
-                    </button>
-                    {/* WhatsApp shows ONLY when the client has a valid mobile */}
-                    {waLink && (
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
-                        title={`Send WhatsApp reminder to ${item.clientPhone}`}
-                      >
-                        <MessageCircle size={14} />
-                      </a>
                     )}
-                  </>
-                )}
-                </div>
+                  </button>
+                  <button
+                    onClick={() => setConfirmRenewId(null)}
+                    disabled={isProcessing}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
+                    title="Cancel"
+                  >
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setConfirmRenewId(item.id)}
+                    className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                    title="Mark policy as renewed"
+                  >
+                    <CheckCircle2 size={14} />
+                  </button>
+                  {/* WhatsApp shows ONLY when the client has a valid mobile */}
+                  {waLink && (
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
+                      title={`Send WhatsApp reminder to ${item.clientPhone}`}
+                    >
+                      <MessageCircle size={14} />
+                    </a>
+                  )}
+                </>
+              )}
               </div>
             </motion.li>
           );
