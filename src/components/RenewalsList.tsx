@@ -5,7 +5,6 @@ import Link from "next/link";
 import { X, Copy, Check, Send, Loader2, CheckCircle2, MessageCircle } from "lucide-react";
 import { shortDate, daysUntil, money, getAdjustedRenewalDate } from "@/lib/format";
 import { AnimatePresence, motion } from "framer-motion";
-import { useRouter } from "next/navigation";
 
 export interface RenewalItem {
   id: string;
@@ -106,7 +105,6 @@ export function RenewalsList({
   renewals: RenewalItem[];
   agentName?: string;
 }) {
-  const router = useRouter();
   const [selected, setSelected] = useState<RenewalItem | null>(null);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -173,8 +171,7 @@ export function RenewalsList({
       setConfirmRenewId(null);
       setToast("Marked as renewed — it'll return next year on the same date.");
       window.setTimeout(() => setToast(null), 4000);
-      // Sync server-rendered counts in the background (no visible reload).
-      router.refresh();
+      // NO router.refresh() - keeps you on same position without page reload
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to mark as renewed");
     } finally {
@@ -241,20 +238,21 @@ export function RenewalsList({
               </div>
                 
               {/* Column 3: Action buttons - fixed width for alignment */}
-              <div className="flex items-center justify-end gap-1.5 w-20 shrink-0">
+              <div className="flex items-center justify-end gap-1.5 w-[140px] shrink-0">
               {isConfirming ? (
                 <>
                   <button
                     onClick={() => markAsRenewed(item.id)}
                     disabled={isProcessing}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50 text-xs font-medium whitespace-nowrap"
                     title="Confirm renewal"
                   >
                     {isProcessing ? (
-                      <Loader2 size={14} className="animate-spin" />
+                      <Loader2 size={13} className="animate-spin" />
                     ) : (
-                      <CheckCircle2 size={14} />
+                      <CheckCircle2 size={13} />
                     )}
+                    <span>Confirm</span>
                   </button>
                   <button
                     onClick={() => setConfirmRenewId(null)}
@@ -269,22 +267,26 @@ export function RenewalsList({
                 <>
                   <button
                     onClick={() => setConfirmRenewId(item.id)}
-                    className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200 text-[11px] font-medium whitespace-nowrap"
                     title="Mark policy as renewed"
                   >
-                    <CheckCircle2 size={14} />
+                    <CheckCircle2 size={12} />
+                    <span>Renewed</span>
                   </button>
                   {/* WhatsApp shows ONLY when the client has a valid mobile */}
-                  {waLink && (
+                  {waLink ? (
                     <a
                       href={waLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
+                      className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 text-[11px] font-medium whitespace-nowrap"
                       title={`Send WhatsApp reminder to ${item.clientPhone}`}
                     >
-                      <MessageCircle size={14} />
+                      <MessageCircle size={12} />
+                      <span>WhatsApp</span>
                     </a>
+                  ) : (
+                    <div className="w-[68px]" /> {/* Spacer to maintain consistent button position */}
                   )}
                 </>
               )}
