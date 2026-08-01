@@ -286,7 +286,7 @@ export function RenewalsList({
                       <span>WhatsApp</span>
                     </a>
                   ) : (
-                    <div className="w-[68px]" /> {/* Spacer to maintain consistent button position */}
+                    <div className="w-[68px]" />
                   )}
                 </>
               )}
