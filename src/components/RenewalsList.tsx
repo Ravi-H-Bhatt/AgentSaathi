@@ -238,13 +238,13 @@ export function RenewalsList({
               </div>
                 
               {/* Column 3: Action buttons - fixed width for alignment */}
-              <div className="flex items-center justify-end gap-1.5 w-[140px] shrink-0">
+              <div className="flex items-center justify-end gap-1 w-[168px] shrink-0">
               {isConfirming ? (
                 <>
                   <button
                     onClick={() => markAsRenewed(item.id)}
                     disabled={isProcessing}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50 text-xs font-medium whitespace-nowrap"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50 text-xs font-medium"
                     title="Confirm renewal"
                   >
                     {isProcessing ? (
@@ -267,10 +267,10 @@ export function RenewalsList({
                 <>
                   <button
                     onClick={() => setConfirmRenewId(item.id)}
-                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200 text-[11px] font-medium whitespace-nowrap"
+                    className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200 text-xs font-medium min-w-max"
                     title="Mark policy as renewed"
                   >
-                    <CheckCircle2 size={12} />
+                    <CheckCircle2 size={13} />
                     <span>Renewed</span>
                   </button>
                   {/* WhatsApp shows ONLY when the client has a valid mobile */}
@@ -279,14 +279,14 @@ export function RenewalsList({
                       href={waLink}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 text-[11px] font-medium whitespace-nowrap"
+                      className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200 text-xs font-medium min-w-max"
                       title={`Send WhatsApp reminder to ${item.clientPhone}`}
                     >
-                      <MessageCircle size={12} />
+                      <MessageCircle size={13} />
                       <span>WhatsApp</span>
                     </a>
                   ) : (
-                    <div className="w-[68px]" />
+                    <div className="w-[92px]" />
                   )}
                 </>
               )}
