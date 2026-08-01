@@ -205,24 +205,24 @@ export function RenewalsList({
               initial={{ opacity: 1 }}
               exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0, overflow: "hidden" }}
               transition={{ duration: 0.25, ease: "easeOut" }}
-              className="flex items-center justify-between px-4 sm:px-5 py-4 gap-2 sm:gap-3 hover:bg-black/[.02] transition-colors">
+              className="flex items-center justify-between px-3 py-3 gap-2 hover:bg-black/[.02] transition-colors">
               <Link
                 href={`/clients/${item.clientId}`}
                 className="min-w-0 flex-1 group"
               >
-                <p className="font-medium truncate group-hover:underline underline-offset-2">
+                <p className="font-medium text-sm truncate group-hover:underline underline-offset-2">
                   {item.clientName}
                 </p>
-                <p className="text-sm text-muted truncate">
+                <p className="text-xs text-muted truncate">
                   {item.policyType || "Policy"}
                   {item.company ? ` · ${item.company}` : ""}
                   {item.policyNumber ? ` · ${item.policyNumber}` : ""}
                 </p>
               </Link>
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                <div className="text-right w-[72px] sm:w-24 shrink-0">
-                  <p className="text-[13px] sm:text-sm font-medium whitespace-nowrap">{shortDate(adjustedDate)}</p>
-                  <p className={`text-xs font-semibold ${
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="text-right w-20 shrink-0">
+                  <p className="text-xs font-medium whitespace-nowrap">{shortDate(adjustedDate)}</p>
+                  <p className={`text-[10px] font-semibold ${
                     dleft != null && dleft < 0 
                       ? "text-red-600" 
                       : dleft != null && dleft <= 7 
@@ -239,42 +239,39 @@ export function RenewalsList({
                   </p>
                 </div>
                 
-                {/* Action area. On desktop it's a fixed width so the date
-                    column stays aligned; on mobile it shrinks to icon buttons
-                    so the client name keeps enough room. */}
-                <div className="flex items-center justify-end gap-1.5 sm:gap-2 w-auto sm:w-[210px] shrink-0">
+                {/* Action area - icon-only buttons for better space usage */}
+                <div className="flex items-center justify-end gap-1.5 shrink-0">
                 {isConfirming ? (
                   <>
                     <button
                       onClick={() => markAsRenewed(item.id)}
                       disabled={isProcessing}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white hover:bg-green-700 transition-all duration-200 disabled:opacity-50"
                       title="Confirm renewal"
                     >
                       {isProcessing ? (
-                        <Loader2 size={13} className="animate-spin" />
+                        <Loader2 size={14} className="animate-spin" />
                       ) : (
-                        <CheckCircle2 size={13} />
+                        <CheckCircle2 size={14} />
                       )}
-                      <span>Confirm</span>
                     </button>
                     <button
                       onClick={() => setConfirmRenewId(null)}
                       disabled={isProcessing}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border hover:bg-black/[.03] transition-all duration-200 disabled:opacity-50"
+                      title="Cancel"
                     >
-                      <X size={13} />
+                      <X size={14} />
                     </button>
                   </>
                 ) : (
                   <>
                     <button
                       onClick={() => setConfirmRenewId(item.id)}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
+                      className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-border text-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-all duration-200"
                       title="Mark policy as renewed"
                     >
-                      <CheckCircle2 size={13} />
-                      <span className="hidden sm:inline">Renewed</span>
+                      <CheckCircle2 size={14} />
                     </button>
                     {/* WhatsApp shows ONLY when the client has a valid mobile */}
                     {waLink && (
@@ -282,11 +279,10 @@ export function RenewalsList({
                         href={waLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-full border border-green-600 text-green-700 hover:bg-green-600 hover:text-white transition-all duration-200"
                         title={`Send WhatsApp reminder to ${item.clientPhone}`}
                       >
-                        <MessageCircle size={13} />
-                        <span className="hidden sm:inline">WhatsApp</span>
+                        <MessageCircle size={14} />
                       </a>
                     )}
                   </>
