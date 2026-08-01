@@ -40,20 +40,15 @@ export default async function DashboardPage() {
 
   const clientById = new Map(clients.map((c) => [c.id, c]));
 
-  // "Renewals needing attention": OVERDUE by up to 5 days (recent, for
-  // follow-up) plus everything renewing in the next 30 days. Uses recurring
-  // dd/mm logic, so a policy stored with a future year still surfaces when its
-  // day-and-month falls within the window. Sorted most-overdue first.
-  // Policies marked "renewed" recently (this cycle) are hidden.
+  // Renewal day-count is mode-aware in the LIC workspace (counted from the
+  // D.o.C day + Mode: Monthly/Quarterly/Half-Yearly/Yearly), and the classic
+  // annual dd/mm logic on the Home side.
   const nowMs = Date.now();
   const RENEWED_HIDE_MS = 330 * 24 * 60 * 60 * 1000; // hide for ~this cycle
-  const renewalsThisMonth = policies
+  
+  // Split policies into renewals (next 30 days) and overdue (past due)
+  const policyWithDays = policies
     .filter((p) => {
-      // Hide if marked renewed within the current cycle (~330 days).
-      // The marker lives in raw_extract.renewed_at (no schema change needed).
-      // The 330-day "renewed" hide is for annual (Home) policies only. LIC
-      // uses anchor advancement (mark-renewed moves to the next cycle), so it
-      // must NOT be hidden for a year.
       if (!isLic) {
         const renewedAt = (p.raw_extract as { renewed_at?: string } | null)?.renewed_at;
         if (renewedAt) {
@@ -61,11 +56,22 @@ export default async function DashboardPage() {
           if (!isNaN(t) && nowMs - t < RENEWED_HIDE_MS) return false;
         }
       }
+      // LIC: Filter out Monthly mode (auto-renewed), show only Quarterly, Half-Yearly, Yearly
+      if (isLic && p.mode && p.mode.toLowerCase() === "monthly") {
+        return false;
+      }
       return true;
     })
-    .map((p) => ({ p, d: dueInDays(p) }))
-    .filter(({ d }) => d != null && d >= -5 && d <= 30)
+    .map((p) => ({ p, d: dueInDays(p) }));
+
+  const renewalsThisMonth = policyWithDays
+    .filter(({ d }) => d != null && d >= 0 && d <= 30)
     .sort((a, b) => (a.d as number) - (b.d as number))
+    .map(({ p }) => p);
+
+  const overdueRenewals = policyWithDays
+    .filter(({ d }) => d != null && d < 0 && d >= -5)
+    .sort((a, b) => (b.d as number) - (a.d as number)) // most overdue first
     .map(({ p }) => p);
   const totalSI = policies.reduce((s, p) => s + (p.sum_insured || 0), 0);
 
@@ -110,46 +116,85 @@ export default async function DashboardPage() {
       </Reveal>
 
       <Reveal delay={0.1}>
-        <section className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold">Renewals in next 30 days</h2>
-            <span className="text-sm text-muted">
-              {renewalsThisMonth.length} due
-            </span>
-          </div>
-          {renewalsThisMonth.length === 0 ? (
-            <p className="px-5 py-10 text-center text-muted text-sm">
-              No renewals in the next 30 days. You&apos;re all caught up.
-            </p>
-          ) : (
-            <RenewalsList
-                agentName={agent.full_name || agent.email}
-                renewals={renewalsThisMonth.map((p: Policy) => {
-                const c = clientById.get(p.client_id) as Client | undefined;
-                return {
-                  id: p.id,
-                  clientId: p.client_id,
-                  clientName: c?.full_name || "Unknown client",
-                  clientEmail: c?.email || null,
-                  clientPhone: c?.phone || null,
-                  policyType: p.policy_type,
-                  company: p.company,
-                  policyNumber: p.policy_number,
-                  sumInsured: p.sum_insured,
-                  premium: p.premium,
-                  renewalDate: p.renewal_date,
-                  mode: p.mode,
-                  // LIC: pass the mode-aware next-due date + day count so the
-                  // list shows the correct upcoming installment (not an annual
-                  // recurrence). Home leaves these undefined and uses dd/mm.
-                  nextDueDate: isLic
-                    ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
-                    : undefined,
-                  daysLeft: isLic ? dueInDays(p) : undefined,
-                };
-              })} />
-          )}
-        </section>
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Left: Renewals in next 30 days - takes 2 columns on desktop */}
+          <section className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold">Renewals in next 30 days</h2>
+              <span className="text-sm text-muted">
+                {renewalsThisMonth.length} due
+              </span>
+            </div>
+            {renewalsThisMonth.length === 0 ? (
+              <p className="px-5 py-10 text-center text-muted text-sm">
+                No renewals in the next 30 days. You&apos;re all caught up.
+              </p>
+            ) : (
+              <RenewalsList
+                  agentName={agent.full_name || agent.email}
+                  renewals={renewalsThisMonth.map((p: Policy) => {
+                  const c = clientById.get(p.client_id) as Client | undefined;
+                  return {
+                    id: p.id,
+                    clientId: p.client_id,
+                    clientName: c?.full_name || "Unknown client",
+                    clientEmail: c?.email || null,
+                    clientPhone: c?.phone || null,
+                    policyType: p.policy_type,
+                    company: p.company,
+                    policyNumber: p.policy_number,
+                    sumInsured: p.sum_insured,
+                    premium: p.premium,
+                    renewalDate: p.renewal_date,
+                    mode: p.mode,
+                    nextDueDate: isLic
+                      ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
+                      : undefined,
+                    daysLeft: isLic ? dueInDays(p) : undefined,
+                  };
+                })} />
+            )}
+          </section>
+
+          {/* Right: Overdue renewals */}
+          <section className="rounded-2xl border border-border bg-card overflow-hidden">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h2 className="font-semibold">Overdue</h2>
+              <span className="text-sm text-red-600 font-medium">
+                {overdueRenewals.length}
+              </span>
+            </div>
+            {overdueRenewals.length === 0 ? (
+              <p className="px-5 py-10 text-center text-muted text-sm">
+                No overdue renewals. Great job!
+              </p>
+            ) : (
+              <RenewalsList
+                  agentName={agent.full_name || agent.email}
+                  renewals={overdueRenewals.map((p: Policy) => {
+                  const c = clientById.get(p.client_id) as Client | undefined;
+                  return {
+                    id: p.id,
+                    clientId: p.client_id,
+                    clientName: c?.full_name || "Unknown client",
+                    clientEmail: c?.email || null,
+                    clientPhone: c?.phone || null,
+                    policyType: p.policy_type,
+                    company: p.company,
+                    policyNumber: p.policy_number,
+                    sumInsured: p.sum_insured,
+                    premium: p.premium,
+                    renewalDate: p.renewal_date,
+                    mode: p.mode,
+                    nextDueDate: isLic
+                      ? getLicNextDueISO(p.start_date, p.mode, undefined, licPaidThrough(p))
+                      : undefined,
+                    daysLeft: isLic ? dueInDays(p) : undefined,
+                  };
+                })} />
+            )}
+          </section>
+        </div>
       </Reveal>
     </div>
   );
